@@ -1,6 +1,8 @@
 package uk.gov.nationalarchives
 
 import cats.effect.IO
+import com.amazonaws.services.lambda.runtime.events.SQSEvent
+import com.amazonaws.services.lambda.runtime.events.SQSEvent.SQSMessage
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.http.RequestMethod
@@ -14,7 +16,6 @@ import uk.gov.nationalarchives.FileProcessor.{TREInput, TREInputParameters}
 import uk.gov.nationalarchives.SeriesMapper.Output
 import upickle.default._
 
-import java.io.ByteArrayInputStream
 import java.net.URI
 import java.util.UUID
 import scala.jdk.CollectionConverters._
@@ -81,6 +82,14 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     }
   }
 
+  def createEvent(body: String): SQSEvent = {
+    val sqsEvent = new SQSEvent()
+    val record = new SQSMessage()
+    record.setBody(body)
+    sqsEvent.setRecords(List(record).asJava)
+    sqsEvent
+  }
+
   def stubAWSRequests(
       inputBucket: String,
       fileDownloadBytes: Option[Array[Byte]] = None,
@@ -140,8 +149,8 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     val inputBucket = "inputBucket"
     stubAWSRequests(inputBucket)
     val packageAvailable = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
-    val is = new ByteArrayInputStream(write(packageAvailable).getBytes())
-    IngestParserTest().handleRequest(is, null, null)
+    val event = createEvent(write(packageAvailable))
+    IngestParserTest().handleRequest(event, null)
     val serveEvents = s3Server.getAllServeEvents.asScala
     serveEvents.count(e =>
       e.getRequest.getUrl == s"/$inputBucket/test.tar.gz" && e.getRequest.getMethod == RequestMethod.GET
@@ -152,8 +161,8 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     val inputBucket = "inputBucket"
     stubAWSRequests(inputBucket)
     val packageAvailable = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
-    val is = new ByteArrayInputStream(write(packageAvailable).getBytes())
-    IngestParserTest().handleRequest(is, null, null)
+    val event = createEvent(write(packageAvailable))
+    IngestParserTest().handleRequest(event, null)
     val serveEvents = s3Server.getAllServeEvents.asScala
     def countPutEvents(name: String) = serveEvents.count(e =>
       e.getRequest.getUrl == s"/$testOutputBucket/$reference/$name" && e.getRequest.getMethod == RequestMethod.PUT
@@ -167,8 +176,8 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     val inputBucket = "inputBucket"
     stubAWSRequests(inputBucket)
     val packageAvailable = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
-    val is = new ByteArrayInputStream(write(packageAvailable).getBytes())
-    IngestParserTest().handleRequest(is, null, null)
+    val event = createEvent(write(packageAvailable))
+    IngestParserTest().handleRequest(event, null)
 
     val sfnEvent = sfnServer.getAllServeEvents.asScala.head
     val sfnRequest = read[SFNRequest](sfnEvent.getRequest.getBodyAsString)
@@ -185,9 +194,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   }
 
   "the lambda" should "error if the input json is invalid" in {
-    val is = new ByteArrayInputStream("{}".getBytes())
+    val event = createEvent("{}")
     val ex = intercept[Exception] {
-      IngestParserTest().handleRequest(is, null, null)
+      IngestParserTest().handleRequest(event, null)
     }
     ex.getMessage should equal("missing keys in dictionary: parameters at index 1")
   }
@@ -196,9 +205,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     val inputBucket = "inputBucket"
     stubAWSRequests(inputBucket, metadataJsonOpt = Option("{}"))
     val packageAvailable = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
-    val is = new ByteArrayInputStream(write(packageAvailable).getBytes())
+    val event = createEvent(write(packageAvailable))
     val ex = intercept[Exception] {
-      IngestParserTest().handleRequest(is, null, null)
+      IngestParserTest().handleRequest(event, null)
     }
     ex.getMessage should equal("missing keys in dictionary: parameters at index 1")
   }
@@ -207,9 +216,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     val inputBucket = "inputBucket"
     val packageAvailable = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
     s3Server.stop()
-    val is = new ByteArrayInputStream(write(packageAvailable).getBytes())
+    val event = createEvent(write(packageAvailable))
     val ex = intercept[Exception] {
-      IngestParserTest().handleRequest(is, null, null)
+      IngestParserTest().handleRequest(event, null)
     }
     ex.getMessage should equal("Failed to send the request: socket connection refused.")
   }

@@ -15,6 +15,7 @@ lazy val root = (project in file(".")).
       log4jCore,
       log4jTemplateJson,
       lambdaCore,
+      lambdaJavaEvents,
       pureConfig,
       pureConfigCats,
       reactiveStreams,
@@ -30,6 +31,9 @@ lazy val root = (project in file(".")).
 (assembly / assemblyJarName) := "dr2-ingest-parsed-court-document-event-handler.jar"
 
 scalacOptions ++= Seq("-Wunused:imports", "-Werror")
+
+(Test / fork) := true
+(Test / envVars) := Map("AWS_ACCESS_KEY_ID" -> "accesskey", "AWS_SECRET_ACCESS_KEY" -> "secret")
 
 (assembly / assemblyMergeStrategy) := {
   case PathList(ps@_*) if ps.last == "Log4j2Plugins.dat" => log4j2MergeStrategy
