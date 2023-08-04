@@ -62,20 +62,21 @@ class FileProcessor(
       series: String
   ): IO[String] = {
     val title = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
-    val folderMetadataHeader = NonEmptyList("identifier", List("path", "name", "title"))
+    val folderMetadataHeader = NonEmptyList("identifier", List("parentPath", "name", "title"))
     val assetMetadataHeader = NonEmptyList("identifier", List("parentPath", "title"))
-    val fileMetadataHeader = NonEmptyList("identifier", List("parentAsset", "name", "fileSize", "title"))
-    val folderId = uuidGenerator()
+    val fileMetadataHeader = NonEmptyList("identifier", List("parentPath", "name", "fileSize", "title"))
+    val folderPath = uuidGenerator()
     val assetId = uuidGenerator()
-    val folderMetadataRow = Row(NonEmptyList(folderId.toString, List("", cite, title)))
-    val assetMetadataRow = Row(NonEmptyList(assetId.toString, List(cite, title)))
+    val assetPath = s"$folderPath/$assetId"
+    val folderMetadataRow = Row(NonEmptyList(folderPath.toString, List("", cite, title)))
+    val assetMetadataRow = Row(NonEmptyList(assetId.toString, List(folderPath.toString, title)))
     val fileRow = Row(
-      NonEmptyList(fileInfo.id.toString, List(assetId.toString, fileInfo.fileName, fileInfo.fileSize.toString, title))
+      NonEmptyList(fileInfo.id.toString, List(assetPath, fileInfo.fileName, fileInfo.fileSize.toString, title))
     )
     val fileMetadataRow = Row(
       NonEmptyList(
         metadataFileInfo.id.toString,
-        List(assetId.toString, metadataFileInfo.fileName, metadataFileInfo.fileSize.toString, "")
+        List(assetPath, metadataFileInfo.fileName, metadataFileInfo.fileSize.toString, "")
       )
     )
     val bagitTxtRow = Row(NonEmptyList("Tag-File-Character-Encoding: UTF-8", Nil))

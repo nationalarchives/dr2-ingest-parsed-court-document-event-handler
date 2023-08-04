@@ -189,19 +189,21 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     val department = "TEST"
     val series = "TEST SERIES"
     val s3 = mock[DAS3Client[IO]]
+    val folderId = generator.uuids.head
+    val assetId = generator.uuids.last
     val folderString =
-      s"""identifier,path,name,title
-         |${generator.uuids.head},,TEST-CITE,
+      s"""identifier,parentPath,name,title
+         |$folderId,,TEST-CITE,
          |""".stripMargin
     val assetString =
       s"""identifier,parentPath,title
-         |${generator.uuids.last},TEST-CITE,
+         |$assetId,$folderId,
          |""".stripMargin
 
     val fileString =
-      s"""identifier,parentAsset,name,fileSize,title
-         |$fileId,${generator.uuids.last},fileName,1,
-         |$metadataId,${generator.uuids.last},metadataFileName,2,
+      s"""identifier,parentPath,name,fileSize,title
+         |$fileId,$folderId/$assetId,fileName,1,
+         |$metadataId,$folderId/$assetId,metadataFileName,2,
          |""".stripMargin
 
     val bagitString =
