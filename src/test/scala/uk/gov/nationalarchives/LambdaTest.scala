@@ -13,7 +13,7 @@ import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3AsyncClient
 import software.amazon.awssdk.services.sfn.SfnAsyncClient
 import uk.gov.nationalarchives.FileProcessor.{TREInput, TREInputParameters}
-import uk.gov.nationalarchives.SeriesMapper.Output
+import uk.gov.nationalarchives.SeriesMapper.{Court, Output}
 import upickle.default._
 
 import java.net.URI
@@ -57,6 +57,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   val s3Server = new WireMockServer(9003)
   val sfnServer = new WireMockServer(9004)
   val testOutputBucket = "outputBucket"
+  val inputBucket = "inputBucket"
+  val packageAvailable: TREInput = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
+  val event: SQSEvent = createEvent(write(packageAvailable))
 
   case class IngestParserTest() extends Lambda {
     private val s3AsyncClient: S3AsyncClient = S3AsyncClient
@@ -73,10 +76,10 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
 
     override val s3: DAS3Client[IO] = DAS3Client[IO](s3AsyncClient)
     override val sfn: DASFNClient[IO] = new DASFNClient(sfnAsyncClient)
-    override val seriesMapper: SeriesMapper = new SeriesMapper(Map("cite" -> "TEST SERIES"))
+    override val seriesMapper: SeriesMapper = new SeriesMapper(Set(Court("cite", "TEST", "TEST SERIES")))
     var count: Int = -1
 
-    override val uuidGenerator: () => UUID = () => {
+    override val randomUuidGenerator: () => UUID = () => {
       count = count + 1
       UUID.fromString(uuids(count))
     }
@@ -114,14 +117,14 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
       s"""{"parameters":{"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}"""
     )
 
-    metadataFiles.foreach(file => {
+    metadataFiles.foreach { file =>
       s3Server.stubFor(
         put(urlEqualTo(s"/$testOutputBucket/$reference/$file"))
           .willReturn(ok())
       )
-    })
+    }
 
-    uuids.foreach(uuid => {
+    uuids.foreach { uuid =>
       s3Server.stubFor(
         put(urlEqualTo(s"/$testOutputBucket/$uuid"))
           .willReturn(ok())
@@ -142,14 +145,11 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
               .withHeader("ETag", "abcde")
           )
       )
-    })
+    }
   }
 
   "the lambda" should "download the .tar.gz file from the input bucket" in {
-    val inputBucket = "inputBucket"
     stubAWSRequests(inputBucket)
-    val packageAvailable = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
-    val event = createEvent(write(packageAvailable))
     IngestParserTest().handleRequest(event, null)
     val serveEvents = s3Server.getAllServeEvents.asScala
     serveEvents.count(e =>
@@ -158,10 +158,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   }
 
   "the lambda" should "write the bagit package to the output bucket" in {
-    val inputBucket = "inputBucket"
     stubAWSRequests(inputBucket)
-    val packageAvailable = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
-    val event = createEvent(write(packageAvailable))
     IngestParserTest().handleRequest(event, null)
     val serveEvents = s3Server.getAllServeEvents.asScala
     def countPutEvents(name: String) = serveEvents.count(e =>
@@ -173,10 +170,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   }
 
   "the lambda" should "start the state machine execution with the correct parameters" in {
-    val inputBucket = "inputBucket"
     stubAWSRequests(inputBucket)
-    val packageAvailable = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
-    val event = createEvent(write(packageAvailable))
     IngestParserTest().handleRequest(event, null)
 
     val sfnEvent = sfnServer.getAllServeEvents.asScala.head
@@ -202,10 +196,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   }
 
   "the lambda" should "error if the json in the metadata file is invalid" in {
-    val inputBucket = "inputBucket"
     stubAWSRequests(inputBucket, metadataJsonOpt = Option("{}"))
-    val packageAvailable = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
-    val event = createEvent(write(packageAvailable))
     val ex = intercept[Exception] {
       IngestParserTest().handleRequest(event, null)
     }
@@ -213,10 +204,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   }
 
   "the lambda" should "error if S3 is unavailable" in {
-    val inputBucket = "inputBucket"
-    val packageAvailable = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
     s3Server.stop()
-    val event = createEvent(write(packageAvailable))
     val ex = intercept[Exception] {
       IngestParserTest().handleRequest(event, null)
     }

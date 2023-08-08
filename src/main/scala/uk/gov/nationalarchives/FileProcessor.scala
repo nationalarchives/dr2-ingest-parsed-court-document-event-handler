@@ -45,9 +45,9 @@ class FileProcessor(
     for {
       s3Stream <- s3.download(uploadBucket, metadataId.toString)
       contentString <- s3Stream
-        .toStreamBuffered[IO](1024 * 64)
+        .toStreamBuffered[IO](chunkSize)
         .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
-        .through(parseJson)
+        .through(extractMetadataFromJson)
         .compile
         .toList
       parsedJson <- IO.fromOption(contentString.headOption)(new RuntimeException("Error parsing json"))
@@ -101,13 +101,13 @@ class FileProcessor(
       bagitTxtChecksum <- createAndUploadFile("bagit.txt", bagitTxtRow :: Nil, bagitTxtHeader)
       manifestString =
         s"${fileInfo.checksum} data/${fileInfo.id}\n${metadataFileInfo.checksum} data/${metadataFileInfo.id}"
-      manifestSha256Checksum <- uploadFileString(
+      manifestSha256Checksum <- uploadAsFile(
         manifestString,
         "manifest-sha256.txt",
         manifestString.getBytes.length
       )
       bagInfoString = s"Department: $department\nSeries: $series"
-      bagInfoChecksum <- uploadFileString(bagInfoString, "bag-info.txt", bagInfoString.getBytes.length)
+      bagInfoChecksum <- uploadAsFile(bagInfoString, "bag-info.txt", bagInfoString.getBytes.length)
       tagManifest <- createTagManifest(
         folderMetadataChecksum,
         assetMetadataChecksum,
@@ -119,12 +119,40 @@ class FileProcessor(
     } yield tagManifest
   }
 
-  private def parseJson(str: Stream[IO, Byte]): Stream[IO, TREMetadata] = {
+  private def extractMetadataFromJson(str: Stream[IO, Byte]): Stream[IO, TREMetadata] = {
     str
       .through(text.utf8.decode)
-      .map(jsonString => {
+      .map { jsonString =>
         read[TREMetadata](jsonString)
-      })
+      }
+  }
+
+  private def readEntriesAndUpload(tarInputStream: TarArchiveInputStream): Stream[IO, (String, FileInfo)] = {
+    Stream
+      .eval(IO.blocking(Option(tarInputStream.getNextTarEntry)))
+      .flatMap(Stream.fromOption[IO](_))
+      .flatMap { tarEntry =>
+        Stream
+          .eval(IO(readInputStream(IO.pure[InputStream](tarInputStream), chunkSize, closeAfterUse = false)))
+          .flatMap { stream =>
+            if (!tarEntry.isDirectory) {
+              val id = uuidGenerator()
+              Stream.eval[IO, (String, FileInfo)](
+                stream.chunks
+                  .map(_.toByteBuffer)
+                  .toUnicastPublisher
+                  .use(s3.upload(uploadBucket, id.toString, tarEntry.getSize, _))
+                  .map { res =>
+                    val checksum = checksumToString(res.response().checksumSHA256())
+                    tarEntry.getName -> FileInfo(id, tarEntry.getSize, tarEntry.getName.split("/").last, checksum)
+                  }
+              )
+            } else {
+              Stream.empty
+            }
+          } ++
+          readEntriesAndUpload(tarInputStream)
+      }
   }
 
   private def unarchiveToS3: Pipe[IO, Byte, (String, FileInfo)] = { stream =>
@@ -132,42 +160,12 @@ class FileProcessor(
       .through(toInputStream[IO])
       .map(new BufferedInputStream(_, chunkSize))
       .flatMap(is => Stream.resource(Resource.fromAutoCloseable(IO.blocking(new TarArchiveInputStream(is)))))
-      .flatMap { tarInputStream =>
-        def readEntriesAndUpload: Stream[IO, (String, FileInfo)] = {
-          Stream
-            .eval(IO.blocking(Option(tarInputStream.getNextTarEntry)))
-            .flatMap(Stream.fromOption[IO](_))
-            .flatMap { tarEntry =>
-              Stream
-                .eval(IO(readInputStream(IO.pure[InputStream](tarInputStream), chunkSize, closeAfterUse = false)))
-                .flatMap(stream => {
-                  if (!tarEntry.isDirectory) {
-                    val id = uuidGenerator()
-                    Stream.eval[IO, (String, FileInfo)](
-                      stream.chunks
-                        .map(_.toByteBuffer)
-                        .toUnicastPublisher
-                        .use(s3.upload(uploadBucket, id.toString, tarEntry.getSize, _))
-                        .map(res => {
-                          val checksum = checksumToString(res.response().checksumSHA256())
-                          tarEntry.getName -> FileInfo(id, tarEntry.getSize, tarEntry.getName.split("/").last, checksum)
-                        })
-                    )
-                  } else {
-                    Stream.empty
-                  }
-                }) ++
-                readEntriesAndUpload
-            }
-        }
-
-        readEntriesAndUpload
-      }
+      .flatMap(readEntriesAndUpload)
   }
 
-  private def uploadFileString(fileString: String, key: String, fileSize: Long) = {
+  private def uploadAsFile(fileContent: String, key: String, fileSize: Long) = {
     Stream
-      .eval(IO(fileString))
+      .eval(IO(fileContent))
       .map(s => ByteBuffer.wrap(s.getBytes()))
       .toUnicastPublisher
       .use { pub =>
@@ -184,7 +182,7 @@ class FileProcessor(
       .through(lowlevel.toRowStrings())
       .compile
       .string
-      .flatMap(s => uploadFileString(s, key, s.getBytes.length))
+      .flatMap(s => uploadAsFile(s, key, s.getBytes.length))
   }
 
   private def checksumToString(checksum: String): String =
@@ -213,7 +211,7 @@ class FileProcessor(
         s"$checksum $file"
       }
       .mkString("\n")
-    uploadFileString(tagManifest, "tagmanifest-sha256.txt", tagManifest.getBytes.length)
+    uploadAsFile(tagManifest, "tagmanifest-sha256.txt", tagManifest.getBytes.length)
   }
 }
 

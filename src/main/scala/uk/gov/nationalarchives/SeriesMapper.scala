@@ -1,18 +1,17 @@
 package uk.gov.nationalarchives
 
 import cats.effect._
-import uk.gov.nationalarchives.SeriesMapper.Output
+import uk.gov.nationalarchives.SeriesMapper._
 import upickle.default._
 
-class SeriesMapper(seriesMap: Map[String, String]) {
+class SeriesMapper(courts: Set[Court]) {
   def createOutput(uploadBucket: String, batchId: String, cite: String): IO[Output] = {
-    val filteredSeries = seriesMap.filter(ds => cite.contains(ds._1))
+    val filteredSeries = courts.filter(court => cite.contains(court.code))
     filteredSeries.size match {
       case 1 =>
         IO {
-          val series = filteredSeries.head._2
-          val department = series.split(" ").head
-          Output(batchId, uploadBucket, s"$batchId/", department, series)
+          val court = filteredSeries.head
+          Output(batchId, uploadBucket, s"$batchId/", court.dept, court.series)
         }
       case size: Int =>
         IO.raiseError(
@@ -21,22 +20,26 @@ class SeriesMapper(seriesMap: Map[String, String]) {
     }
   }
 }
+
 object SeriesMapper {
   implicit val outputWriter: Writer[Output] = macroW[Output]
+
   case class Output(batchId: String, s3Bucket: String, s3Prefix: String, department: String, series: String)
+
+  case class Court(code: String, dept: String, series: String)
 
   def apply(): SeriesMapper = new SeriesMapper(seriesMap)
 
-  val seriesMap: Map[String, String] = Map(
-    "EWCA" -> "J 347",
-    "EWHC" -> "J 348",
-    "EWCOP" -> "J 349",
-    "EWFC" -> "J 350",
-    "UKPC" -> "PCAP 16",
-    "UKSC" -> "UKSC 2",
-    "UKUT" -> "LE 9",
-    "UKEAT" -> "LE 10",
-    "UKFTT" -> "LE 11",
-    "UKET" -> "LE 12"
+  val seriesMap: Set[Court] = Set(
+    Court("EWCA", "J", "J 347"),
+    Court("EWHC", "J", "J 348"),
+    Court("EWCOP", "J", "J 349"),
+    Court("EWFC", "J", "J 350"),
+    Court("UKPC", "PCAP", "PCAP 16"),
+    Court("UKSC", "UKSC", "UKSC 2"),
+    Court("UKUT", "LE", "LE 9"),
+    Court("UKEAT", "LE", "LE 10"),
+    Court("UKFTT", "LE", "LE 11"),
+    Court("UKET", "LE", "LE 12")
   )
 }

@@ -27,27 +27,29 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
   val metadataJson =
     s"""{"parameters":{"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}"""
 
-  case class UUIDGenerator() {
-    var count: Int = -1
-    val uuids: List[String] = List("6e827e19-6a33-46c3-8730-b242c203d8c1", "49e4a726-6297-4f8e-8867-fb50bd5acd86")
+  private val uuids: List[String] = List("6e827e19-6a33-46c3-8730-b242c203d8c1", "49e4a726-6297-4f8e-8867-fb50bd5acd86")
 
-    val uuidGenerator: () => UUID = () => {
-      count = count + 1
-      UUID.fromString(uuids(count))
-    }
+  case class UUIDGenerator() {
+    val uuidsIterator: Iterator[String] = uuids.iterator
+
+    val uuidGenerator: () => UUID = () => UUID.fromString(uuidsIterator.next())
   }
 
-  def checksum(cs: Option[String]): String =
-    cs.map(c => Base64.getEncoder.encode(HexFormat.of().parseHex(c)).map(_.toChar).mkString).orNull
+  def convertChecksumToS3Format(cs: Option[String]): String =
+    cs.map { c =>
+      Base64.getEncoder
+        .encode(HexFormat.of().parseHex(c))
+        .map(_.toChar)
+        .mkString
+    }.orNull
 
   def completedUpload(c: Option[String] = None): CompletedUpload = {
-    val putObjectResponse = PutObjectResponse.builder.checksumSHA256(checksum(c)).build
+    val putObjectResponse = PutObjectResponse.builder.checksumSHA256(convertChecksumToS3Format(c)).build
     CompletedUpload.builder.response(putObjectResponse).build
   }
 
   "copyFilesToBucket" should "return the correct file metadata for a valid tar.gz file" in {
     val generator = UUIDGenerator()
-    val uuids = generator.uuids
     val s3 = mock[DAS3Client[IO]]
     val docxCompletedUpload = completedUpload(Option("abcdef"))
 
@@ -122,7 +124,6 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
   "copyFilesToBucket" should "return an empty checksum if a checksum is not returned from S3" in {
     val generator = UUIDGenerator()
-    val uuids = generator.uuids
     val s3 = mock[DAS3Client[IO]]
     val docxCompletedUpload = completedUpload()
 
@@ -184,13 +185,12 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
   "createMetadataFiles" should "upload the correct bagit files" in {
     val fileId = UUID.randomUUID()
-    val generator = UUIDGenerator()
     val metadataId = UUID.randomUUID()
     val department = "TEST"
     val series = "TEST SERIES"
     val s3 = mock[DAS3Client[IO]]
-    val folderId = generator.uuids.head
-    val assetId = generator.uuids.last
+    val folderId = uuids.head
+    val assetId = uuids.last
     val folderString =
       s"""identifier,parentPath,name,title
          |$folderId,,TEST-CITE,
