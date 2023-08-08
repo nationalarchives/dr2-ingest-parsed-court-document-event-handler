@@ -27,7 +27,7 @@ class FileProcessor(
     uuidGenerator: () => UUID
 ) {
 
-  def copyFilesToBucket(key: String): IO[Map[String, FileInfo]] = {
+  def copyFilesFromDownloadToUploadBucket(key: String): IO[Map[String, FileInfo]] = {
     s3.download(downloadBucket, key)
       .flatMap(
         _.toStreamBuffered[IO](10 * 1024)
@@ -127,7 +127,7 @@ class FileProcessor(
       }
   }
 
-  private def readEntriesAndUpload(tarInputStream: TarArchiveInputStream): Stream[IO, (String, FileInfo)] = {
+  private def unarchiveAndUploadToS3(tarInputStream: TarArchiveInputStream): Stream[IO, (String, FileInfo)] = {
     Stream
       .eval(IO.blocking(Option(tarInputStream.getNextTarEntry)))
       .flatMap(Stream.fromOption[IO](_))
@@ -151,7 +151,7 @@ class FileProcessor(
               Stream.empty
             }
           } ++
-          readEntriesAndUpload(tarInputStream)
+          unarchiveAndUploadToS3(tarInputStream)
       }
   }
 
@@ -160,7 +160,7 @@ class FileProcessor(
       .through(toInputStream[IO])
       .map(new BufferedInputStream(_, chunkSize))
       .flatMap(is => Stream.resource(Resource.fromAutoCloseable(IO.blocking(new TarArchiveInputStream(is)))))
-      .flatMap(readEntriesAndUpload)
+      .flatMap(unarchiveAndUploadToS3)
   }
 
   private def uploadAsFile(fileContent: String, key: String, fileSize: Long) = {

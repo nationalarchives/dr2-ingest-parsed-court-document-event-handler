@@ -25,24 +25,24 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
     input.getRecords.asScala.toList.map { record =>
       val treInput = read[TREInput](record.getBody)
       val inputBucket = treInput.parameters.s3Bucket
-      val reference = treInput.parameters.reference
+      val batchRef = treInput.parameters.reference
 
       for {
         config <- ConfigSource.default.loadF[IO, Config]()
         outputBucket = config.outputBucket
-        fileProcessor = new FileProcessor(inputBucket, outputBucket, reference, s3, randomUuidGenerator)
-        fileNameToFileInfo <- fileProcessor.copyFilesToBucket(treInput.parameters.s3Key)
+        fileProcessor = new FileProcessor(inputBucket, outputBucket, batchRef, s3, randomUuidGenerator)
+        fileNameToFileInfo <- fileProcessor.copyFilesFromDownloadToUploadBucket(treInput.parameters.s3Key)
 
-        metadataFileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$reference/TRE-$reference-metadata.json"))(
-          new RuntimeException(s"Cannot find metadata for $reference")
+        metadataFileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$batchRef/TRE-$batchRef-metadata.json"))(
+          new RuntimeException(s"Cannot find metadata for $batchRef")
         )
         treMetadata <- fileProcessor.readJsonFromPackage(metadataFileInfo.id)
         payload = treMetadata.parameters.TRE.payload
         cite = treMetadata.parameters.PARSER.cite
-        fileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$reference/${payload.filename}"))(
-          new RuntimeException(s"Document not found for file belonging to $reference")
+        fileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$batchRef/${payload.filename}"))(
+          new RuntimeException(s"Document not found for file belonging to $batchRef")
         )
-        output <- seriesMapper.createOutput(config.outputBucket, reference, cite)
+        output <- seriesMapper.createOutput(config.outputBucket, batchRef, cite)
         _ <- fileProcessor.createMetadataFiles(
           fileInfo.copy(checksum = payload.sha256),
           metadataFileInfo,
@@ -50,11 +50,11 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           output.department,
           output.series
         )
-        _ <- s3.copy(outputBucket, fileInfo.id.toString, outputBucket, s"$reference/data/${fileInfo.id}")
+        _ <- s3.copy(outputBucket, fileInfo.id.toString, outputBucket, s"$batchRef/data/${fileInfo.id}")
         _ <- s3
-          .copy(outputBucket, metadataFileInfo.id.toString, outputBucket, s"$reference/data/${metadataFileInfo.id}")
+          .copy(outputBucket, metadataFileInfo.id.toString, outputBucket, s"$batchRef/data/${metadataFileInfo.id}")
 
-        _ <- sfn.startExecution(config.sfnArn, output, Option(s"$reference-${randomUuidGenerator()}"))
+        _ <- sfn.startExecution(config.sfnArn, output, Option(s"$batchRef-${randomUuidGenerator()}"))
       } yield ()
     }.sequence
   }.unsafeRunSync()

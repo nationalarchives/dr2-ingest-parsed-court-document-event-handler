@@ -62,7 +62,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
       .thenReturn(IO(metadataCompletedUpload))
 
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, generator.uuidGenerator)
-    val res = fileProcessor.copyFilesToBucket("key").unsafeRunSync()
+    val res = fileProcessor.copyFilesFromDownloadToUploadBucket("key").unsafeRunSync()
 
     res.size should equal(2)
     val docx = res.get(s"$reference/Test.docx")
@@ -90,7 +90,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
     val ex = intercept[Exception] {
-      fileProcessor.copyFilesToBucket("key").unsafeRunSync()
+      fileProcessor.copyFilesFromDownloadToUploadBucket("key").unsafeRunSync()
     }
     ex.getMessage should equal("UpStream failed")
   }
@@ -102,7 +102,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
     val ex = intercept[Exception] {
-      fileProcessor.copyFilesToBucket("key").unsafeRunSync()
+      fileProcessor.copyFilesFromDownloadToUploadBucket("key").unsafeRunSync()
     }
     ex.getMessage should equal("Error downloading files")
   }
@@ -117,7 +117,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
     val ex = intercept[Exception] {
-      fileProcessor.copyFilesToBucket("key").unsafeRunSync()
+      fileProcessor.copyFilesFromDownloadToUploadBucket("key").unsafeRunSync()
     }
     ex.getMessage should equal("Upload failed")
   }
@@ -136,7 +136,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
       .thenReturn(IO(metadataCompletedUpload))
 
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, generator.uuidGenerator)
-    val res = fileProcessor.copyFilesToBucket("key").unsafeRunSync()
+    val res = fileProcessor.copyFilesFromDownloadToUploadBucket("key").unsafeRunSync()
 
     res(s"$reference/Test.docx").checksum should equal("")
     res(s"$reference/TRE-$reference-metadata.json").checksum should equal("")

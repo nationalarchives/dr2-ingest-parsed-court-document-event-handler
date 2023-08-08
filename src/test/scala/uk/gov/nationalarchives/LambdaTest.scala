@@ -78,11 +78,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     override val sfn: DASFNClient[IO] = new DASFNClient(sfnAsyncClient)
     override val seriesMapper: SeriesMapper = new SeriesMapper(Set(Court("cite", "TEST", "TEST SERIES")))
     var count: Int = -1
+    val uuidsIterator: Iterator[String] = uuids.iterator
 
-    override val randomUuidGenerator: () => UUID = () => {
-      count = count + 1
-      UUID.fromString(uuids(count))
-    }
+    override val randomUuidGenerator: () => UUID = () => UUID.fromString(uuidsIterator.next())
   }
 
   def createEvent(body: String): SQSEvent = {
