@@ -27,8 +27,8 @@ class FileProcessor(
     uuidGenerator: () => UUID
 ) {
 
-  def copyFilesFromDownloadToUploadBucket(key: String): IO[Map[String, FileInfo]] = {
-    s3.download(downloadBucket, key)
+  def copyFilesFromDownloadToUploadBucket(downloadBucketKey: String): IO[Map[String, FileInfo]] = {
+    s3.download(downloadBucket, downloadBucketKey)
       .flatMap(
         _.toStreamBuffered[IO](10 * 1024)
           .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
