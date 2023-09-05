@@ -46,7 +46,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         _ <- fileProcessor.createMetadataFiles(
           fileInfo.copy(checksum = payload.sha256),
           metadataFileInfo,
-          cite,
+          cite.getOrElse("Court Documents"),
           output.department,
           output.series
         )

@@ -12,6 +12,7 @@ import org.scalatest.matchers.should.Matchers._
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3AsyncClient
 import software.amazon.awssdk.services.sfn.SfnAsyncClient
+import ujson.{Null, Value}
 import uk.gov.nationalarchives.FileProcessor.{TREInput, TREInputParameters}
 import uk.gov.nationalarchives.SeriesMapper.{Court, Output}
 import upickle.default._
@@ -25,6 +26,11 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   implicit val treInputParamsWriter: Writer[TREInputParameters] = macroW[TREInputParameters]
   implicit val sfnRequestReader: Reader[SFNRequest] = macroR[SFNRequest]
   implicit val outputReader: Reader[Output] = macroR[Output]
+
+  implicit def OptionReader[T: Reader]: Reader[Option[T]] = reader[Value].map[Option[T]] {
+    case Null    => None
+    case jsValue => Some(read[T](jsValue))
+  }
 
   case class SFNRequest(stateMachineArn: String, name: String, input: String)
 
@@ -178,8 +184,48 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     sfnRequest.stateMachineArn should equal("arn:aws:states:eu-west-2:123456789:stateMachine:StateMachineName")
     sfnRequest.name should equal(s"TEST-REFERENCE-${uuids(4)}")
 
-    input.series should equal("TEST SERIES")
-    input.department should equal("TEST")
+    input.series.get should equal("TEST SERIES")
+    input.department.get should equal("TEST")
+    input.batchId should equal("TEST-REFERENCE")
+    input.s3Prefix should equal("TEST-REFERENCE/")
+    input.s3Bucket should equal(testOutputBucket)
+  }
+
+  "the lambda" should "start the state machine execution with a null department and series if the cite is missing" in {
+    val inputJson =
+      s"""{"parameters":{"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},"PARSER":{"uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}"""
+    stubAWSRequests(inputBucket, metadataJsonOpt = Option(inputJson))
+    IngestParserTest().handleRequest(event, null)
+
+    val sfnEvent = sfnServer.getAllServeEvents.asScala.head
+    val sfnRequest = read[SFNRequest](sfnEvent.getRequest.getBodyAsString)
+    val input = read[Output](sfnRequest.input)
+
+    sfnRequest.stateMachineArn should equal("arn:aws:states:eu-west-2:123456789:stateMachine:StateMachineName")
+    sfnRequest.name should equal(s"TEST-REFERENCE-${uuids(4)}")
+
+    input.series should equal(None)
+    input.department should equal(None)
+    input.batchId should equal("TEST-REFERENCE")
+    input.s3Prefix should equal("TEST-REFERENCE/")
+    input.s3Bucket should equal(testOutputBucket)
+  }
+
+  "the lambda" should "start the state machine execution with a null department and series if the cite is null" in {
+    val inputJson =
+      s"""{"parameters":{"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},"PARSER":{"cite": null, "uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}"""
+    stubAWSRequests(inputBucket, metadataJsonOpt = Option(inputJson))
+    IngestParserTest().handleRequest(event, null)
+
+    val sfnEvent = sfnServer.getAllServeEvents.asScala.head
+    val sfnRequest = read[SFNRequest](sfnEvent.getRequest.getBodyAsString)
+    val input = read[Output](sfnRequest.input)
+
+    sfnRequest.stateMachineArn should equal("arn:aws:states:eu-west-2:123456789:stateMachine:StateMachineName")
+    sfnRequest.name should equal(s"TEST-REFERENCE-${uuids(4)}")
+
+    input.series should equal(None)
+    input.department should equal(None)
     input.batchId should equal("TEST-REFERENCE")
     input.s3Prefix should equal("TEST-REFERENCE/")
     input.s3Bucket should equal(testOutputBucket)

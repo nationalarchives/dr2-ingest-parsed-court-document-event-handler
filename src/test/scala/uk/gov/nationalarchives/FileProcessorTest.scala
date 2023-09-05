@@ -9,7 +9,7 @@ import org.mockito.{ArgumentMatcher, ArgumentMatchers, MockitoSugar}
 import org.reactivestreams.Publisher
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
-import org.scalatest.prop.TableDrivenPropertyChecks
+import org.scalatest.prop.{TableDrivenPropertyChecks, TableFor3}
 import reactor.core.publisher.Flux
 import software.amazon.awssdk.services.s3.model.PutObjectResponse
 import software.amazon.awssdk.transfer.s3.model.CompletedUpload
@@ -183,97 +183,111 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     ex.getMessage should equal("Error downloading metadata file")
   }
 
-  "createMetadataFiles" should "upload the correct bagit files" in {
-    val fileId = UUID.randomUUID()
-    val metadataId = UUID.randomUUID()
-    val department = "TEST"
-    val series = "TEST SERIES"
-    val s3 = mock[DAS3Client[IO]]
-    val folderId = uuids.head
-    val assetId = uuids.last
-    val folderString =
-      s"""identifier,parentPath,name,title
-         |$folderId,,TEST-CITE,
-         |""".stripMargin
-    val assetString =
-      s"""identifier,parentPath,title
-         |$assetId,$folderId,
-         |""".stripMargin
+  val departmentSeriesTable: TableFor3[Option[String], Option[String], Boolean] = Table(
+    ("department", "series", "includeBagInfo"),
+    (Option("Department"), Option("Series"), true),
+    (Option("Department"), None, false),
+    (None, Option("Series"), false),
+    (None, None, false)
+  )
 
-    val fileString =
-      s"""identifier,parentPath,name,fileSize,title
-         |$fileId,$folderId/$assetId,fileName,1,
-         |$metadataId,$folderId/$assetId,metadataFileName,2,
-         |""".stripMargin
+  forAll(departmentSeriesTable) { (department, series, includeBagInfo) =>
+    "createMetadataFiles" should s"upload the correct bagit files for $department and $series" in {
+      val fileId = UUID.randomUUID()
+      val metadataId = UUID.randomUUID()
+      val s3 = mock[DAS3Client[IO]]
+      val folderId = uuids.head
+      val assetId = uuids.last
+      val folderString =
+        s"""identifier,parentPath,name,title
+           |$folderId,,TEST-CITE,
+           |""".stripMargin
+      val assetString =
+        s"""identifier,parentPath,title
+           |$assetId,$folderId,
+           |""".stripMargin
 
-    val bagitString =
-      """BagIt-Version: 1.0
-        |Tag-File-Character-Encoding: UTF-8
-        |""".stripMargin
+      val fileString =
+        s"""identifier,parentPath,name,fileSize,title
+           |$fileId,$folderId/$assetId,fileName,1,
+           |$metadataId,$folderId/$assetId,metadataFileName,2,
+           |""".stripMargin
 
-    val manifestString =
-      s"""fileChecksum data/$fileId
-         |metadataChecksum data/$metadataId""".stripMargin
+      val bagitString =
+        """BagIt-Version: 1.0
+          |Tag-File-Character-Encoding: UTF-8
+          |""".stripMargin
 
-    val bagInfoString = s"Department: $department\nSeries: $series"
+      val manifestString =
+        s"""fileChecksum data/$fileId
+           |metadataChecksum data/$metadataId""".stripMargin
 
-    val folderMetadataChecksum = "989680"
-    val assetMetadataChecksum = "989681"
-    val fileMetadataChecksum = "989682"
-    val bagitChecksum = "989683"
-    val manifestChecksum = "989684"
-    val bagInfoChecksum = "989685"
-    val tagManifestChecksum = "989686"
+      val folderMetadataChecksum = "989680"
+      val assetMetadataChecksum = "989681"
+      val fileMetadataChecksum = "989682"
+      val bagitChecksum = "989683"
+      val manifestChecksum = "989684"
+      val bagInfoChecksum = "989685"
+      val tagManifestChecksum = "989686"
 
-    val tagManifest =
-      s"""$assetMetadataChecksum asset-metadata.csv
-         |$bagInfoChecksum bag-info.txt
-         |$bagitChecksum bagit.txt
-         |$fileMetadataChecksum file-metadata.csv
-         |$folderMetadataChecksum folder-metadata.csv
-         |$manifestChecksum manifest-sha256.txt""".stripMargin
-
-    def mockUpload(fileName: String, fileString: String, checksum: String): ArgumentMatcher[Publisher[ByteBuffer]] = {
-      val publisherMatcher = new ArgumentMatcher[Publisher[ByteBuffer]] {
-        override def matches(argument: Publisher[ByteBuffer]): Boolean = {
-          val arg = argument
-            .toStreamBuffered[IO](1024)
-            .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
-            .through(text.utf8.decode)
-            .compile
-            .string
-            .unsafeRunSync()
-          arg == fileString
-        }
-      }
-      when(
-        s3.upload(
-          ArgumentMatchers.eq("upload"),
-          ArgumentMatchers.eq(s"ref/$fileName"),
-          any[Long],
-          argThat(publisherMatcher)
-        )
+      val tagManifest = List(
+        s"$assetMetadataChecksum asset-metadata.csv",
+        s"$bagitChecksum bagit.txt",
+        s"$fileMetadataChecksum file-metadata.csv",
+        s"$folderMetadataChecksum folder-metadata.csv",
+        s"$manifestChecksum manifest-sha256.txt"
       )
-        .thenReturn(IO(completedUpload(Option(checksum))))
-      publisherMatcher
+      val tagManifestString = (if (includeBagInfo) {
+                                 List(tagManifest.head, s"$bagInfoChecksum bag-info.txt") ++ tagManifest.tail
+                               } else {
+                                 tagManifest
+                               }).mkString("\n")
+
+      def mockUpload(fileName: String, fileString: String, checksum: String): ArgumentMatcher[Publisher[ByteBuffer]] = {
+        val publisherMatcher = new ArgumentMatcher[Publisher[ByteBuffer]] {
+          override def matches(argument: Publisher[ByteBuffer]): Boolean = {
+            val arg = argument
+              .toStreamBuffered[IO](1024)
+              .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
+              .through(text.utf8.decode)
+              .compile
+              .string
+              .unsafeRunSync()
+            arg == fileString
+          }
+        }
+        when(
+          s3.upload(
+            ArgumentMatchers.eq("upload"),
+            ArgumentMatchers.eq(s"ref/$fileName"),
+            any[Long],
+            argThat(publisherMatcher)
+          )
+        )
+          .thenReturn(IO(completedUpload(Option(checksum))))
+        publisherMatcher
+      }
+
+      mockUpload("folder-metadata.csv", folderString, folderMetadataChecksum)
+      mockUpload("asset-metadata.csv", assetString, assetMetadataChecksum)
+      mockUpload("file-metadata.csv", fileString, fileMetadataChecksum)
+      mockUpload("bagit.txt", bagitString, bagitChecksum)
+      mockUpload("manifest-sha256.txt", manifestString, manifestChecksum)
+      if (includeBagInfo) {
+        val bagInfoString = s"Department: ${department.get}\nSeries: ${series.get}"
+        mockUpload("bag-info.txt", bagInfoString, bagInfoChecksum)
+      }
+      mockUpload("tagmanifest-sha256.txt", tagManifestString, tagManifestChecksum)
+
+      val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
+      val fileInfo = FileInfo(fileId, 1, "fileName", "fileChecksum")
+      val metadataFileInfo = FileInfo(metadataId, 2, "metadataFileName", "metadataChecksum")
+      val cite = "TEST-CITE"
+      val tagManifestChecksumResult =
+        fileProcessor.createMetadataFiles(fileInfo, metadataFileInfo, cite, department, series).unsafeRunSync()
+
+      tagManifestChecksumResult should equal(tagManifestChecksum)
     }
-
-    mockUpload("folder-metadata.csv", folderString, folderMetadataChecksum)
-    mockUpload("asset-metadata.csv", assetString, assetMetadataChecksum)
-    mockUpload("file-metadata.csv", fileString, fileMetadataChecksum)
-    mockUpload("bagit.txt", bagitString, bagitChecksum)
-    mockUpload("manifest-sha256.txt", manifestString, manifestChecksum)
-    mockUpload("bag-info.txt", bagInfoString, bagInfoChecksum)
-    mockUpload("tagmanifest-sha256.txt", tagManifest, tagManifestChecksum)
-
-    val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
-    val fileInfo = FileInfo(fileId, 1, "fileName", "fileChecksum")
-    val metadataFileInfo = FileInfo(metadataId, 2, "metadataFileName", "metadataChecksum")
-    val cite = "TEST-CITE"
-    val tagManifestChecksumResult =
-      fileProcessor.createMetadataFiles(fileInfo, metadataFileInfo, cite, department, series).unsafeRunSync()
-
-    tagManifestChecksumResult should equal(tagManifestChecksum)
   }
 
   "createMetadataFiles" should "throw an error if there is an error uploading to s3" in {
@@ -289,7 +303,9 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     val cite = "TEST-CITE"
 
     val ex = intercept[Exception] {
-      fileProcessor.createMetadataFiles(fileInfo, metadataFileInfo, cite, "department", "series").unsafeRunSync()
+      fileProcessor
+        .createMetadataFiles(fileInfo, metadataFileInfo, cite, Option("department"), Option("series"))
+        .unsafeRunSync()
     }
     ex.getMessage should equal("Upload failed")
   }
