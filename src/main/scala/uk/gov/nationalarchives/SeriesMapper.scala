@@ -5,8 +5,8 @@ import uk.gov.nationalarchives.SeriesMapper._
 import upickle.default._
 
 class SeriesMapper(courts: Set[Court]) {
-  def createOutput(uploadBucket: String, batchId: String, citeOrEmpty: Option[String]): IO[Output] = {
-    citeOrEmpty
+  def createOutput(uploadBucket: String, batchId: String, potentialCite: Option[String]): IO[Output] = {
+    potentialCite
       .map { cite =>
         val filteredSeries = courts.filter(court => cite.contains(court.code))
         filteredSeries.size match {

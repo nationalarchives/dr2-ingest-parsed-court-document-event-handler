@@ -18,7 +18,7 @@ import uk.gov.nationalarchives.SeriesMapper.{Court, Output}
 import upickle.default._
 
 import java.net.URI
-import java.util.UUID
+import java.util.{Base64, HexFormat, UUID}
 import scala.jdk.CollectionConverters._
 
 class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
@@ -35,22 +35,22 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   case class SFNRequest(stateMachineArn: String, name: String, input: String)
 
   val reference = "TEST-REFERENCE"
-  val uuids: List[String] = List(
-    "c7e6b27f-5778-4da8-9b83-1b64bbccbd03",
-    "61ac0166-ccdf-48c4-800f-29e5fba2efda",
-    "4e6bac50-d80a-4c68-bd92-772ac9701f14",
-    "c2e7866e-5e94-4b4e-a49f-043ad937c18a",
-    "27a9a6bb-a023-4cab-8592-39b44761a30a"
+  val uuids: List[(String, String)] = List(
+    ("c7e6b27f-5778-4da8-9b83-1b64bbccbd03", "71"),
+    ("61ac0166-ccdf-48c4-800f-29e5fba2efda", "81"),
+    ("4e6bac50-d80a-4c68-bd92-772ac9701f14", "91"),
+    ("c2e7866e-5e94-4b4e-a49f-043ad937c18a", "A1"),
+    ("27a9a6bb-a023-4cab-8592-39b44761a30a", "B1")
   )
 
-  val metadataFiles: List[String] = List(
-    "asset-metadata.csv",
-    "bagit.txt",
-    "bag-info.txt",
-    "file-metadata.csv",
-    "folder-metadata.csv",
-    "manifest-sha256.txt",
-    "tagmanifest-sha256.txt"
+  val metadataFiles: List[(String, String)] = List(
+    ("asset-metadata.csv", "01"),
+    ("bagit.txt", "11"),
+    ("bag-info.txt", "21"),
+    ("file-metadata.csv", "31"),
+    ("folder-metadata.csv", "41"),
+    ("manifest-sha256.txt", "51"),
+    ("tagmanifest-sha256.txt", "61")
   )
 
   override def beforeEach(): Unit = {
@@ -66,6 +66,14 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   val inputBucket = "inputBucket"
   val packageAvailable: TREInput = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
   val event: SQSEvent = createEvent(write(packageAvailable))
+
+  private def runLambdaAndReturnStepFunctionRequest(metadataJsonOpt: Option[String] = None) = {
+    stubAWSRequests(inputBucket, metadataJsonOpt = metadataJsonOpt)
+    IngestParserTest().handleRequest(event, null)
+
+    val sfnEvent = sfnServer.getAllServeEvents.asScala.head
+    read[SFNRequest](sfnEvent.getRequest.getBodyAsString)
+  }
 
   case class IngestParserTest() extends Lambda {
     private val s3AsyncClient: S3AsyncClient = S3AsyncClient
@@ -84,7 +92,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     override val sfn: DASFNClient[IO] = new DASFNClient(sfnAsyncClient)
     override val seriesMapper: SeriesMapper = new SeriesMapper(Set(Court("cite", "TEST", "TEST SERIES")))
     var count: Int = -1
-    val uuidsIterator: Iterator[String] = uuids.iterator
+    val uuidsIterator: Iterator[String] = uuids.map(_._1).iterator
 
     override val randomUuidGenerator: () => UUID = () => UUID.fromString(uuidsIterator.next())
   }
@@ -96,6 +104,12 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     sqsEvent.setRecords(List(record).asJava)
     sqsEvent
   }
+
+  def convertChecksumToS3Format(cs: String): String =
+    Base64.getEncoder
+      .encode(HexFormat.of().parseHex(cs))
+      .map(_.toChar)
+      .mkString
 
   def stubAWSRequests(
       inputBucket: String,
@@ -123,15 +137,16 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
 
     metadataFiles.foreach { file =>
       s3Server.stubFor(
-        put(urlEqualTo(s"/$testOutputBucket/$reference/$file"))
-          .willReturn(ok())
+        put(urlEqualTo(s"/$testOutputBucket/$reference/${file._1}"))
+          .willReturn(ok().withHeader("x-amz-checksum-sha256", convertChecksumToS3Format(file._2)))
       )
     }
 
-    uuids.foreach { uuid =>
+    uuids.foreach { uuidAndChecksum =>
+      val uuid = uuidAndChecksum._1
       s3Server.stubFor(
         put(urlEqualTo(s"/$testOutputBucket/$uuid"))
-          .willReturn(ok())
+          .willReturn(ok().withHeader("x-amz-checksum-sha256", convertChecksumToS3Format(uuidAndChecksum._2)))
       )
       s3Server.stubFor(
         put(urlEqualTo(s"/$testOutputBucket/$reference/data/$uuid"))
@@ -165,24 +180,60 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     stubAWSRequests(inputBucket)
     IngestParserTest().handleRequest(event, null)
     val serveEvents = s3Server.getAllServeEvents.asScala
+
     def countPutEvents(name: String) = serveEvents.count(e =>
       e.getRequest.getUrl == s"/$testOutputBucket/$reference/$name" && e.getRequest.getMethod == RequestMethod.PUT
     )
-    metadataFiles.foreach(file => countPutEvents(file) should equal(1))
-    countPutEvents(s"data/${uuids.head}") should equal(1)
-    countPutEvents(s"data/${uuids(1)}") should equal(1)
+
+    metadataFiles.map(_._1).foreach(file => countPutEvents(file) should equal(1))
+    countPutEvents(s"data/${uuids.head._1}") should equal(1)
+    countPutEvents(s"data/${uuids(1)._1}") should equal(1)
+  }
+
+  "the lambda" should "write the correct metadata files to S3" in {
+    stubAWSRequests(inputBucket)
+    IngestParserTest().handleRequest(event, null)
+    val serveEvents = s3Server.getAllServeEvents.asScala
+
+    def filterEvents(name: String) = serveEvents
+      .map(_.getRequest)
+      .find(ev => ev.getUrl == s"/$testOutputBucket/$reference/$name" && ev.getMethod == RequestMethod.PUT)
+      .map(_.getBodyAsString.split("\r\n")(1).trim)
+      .head
+
+    val folderId = "4e6bac50-d80a-4c68-bd92-772ac9701f14"
+    val assetId = "c2e7866e-5e94-4b4e-a49f-043ad937c18a"
+    val fileId = "c7e6b27f-5778-4da8-9b83-1b64bbccbd03"
+    val metadataFileId = "61ac0166-ccdf-48c4-800f-29e5fba2efda"
+
+    val expectedAssetMetadata = s"identifier,parentPath,title\n$assetId,$folderId,Test"
+    val expectedBagitTxt = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
+    val expectedBagInfo = "Department: TEST\nSeries: TEST SERIES"
+    val expectedFileMetadata =
+      s"""identifier,parentPath,name,fileSize,title
+         |$fileId,$folderId/$assetId,Test.docx,15684,Test
+         |$metadataFileId,$folderId/$assetId,TRE-TEST-REFERENCE-metadata.json,215,""".stripMargin
+    val expectedFolderMetadata = s"identifier,parentPath,name,title\n$folderId,,cite,Test"
+    val expectedManifest = s"abcde data/$fileId\n81 data/$metadataFileId"
+    val expectedTagManifest =
+      "01 asset-metadata.csv\n21 bag-info.txt\n11 bagit.txt\n31 file-metadata.csv\n41 folder-metadata.csv\n51 manifest-sha256.txt"
+
+    filterEvents("asset-metadata.csv") should equal(expectedAssetMetadata)
+    filterEvents("bagit.txt") should equal(expectedBagitTxt)
+    filterEvents("bag-info.txt") should equal(expectedBagInfo)
+    filterEvents("file-metadata.csv") should equal(expectedFileMetadata)
+    filterEvents("folder-metadata.csv") should equal(expectedFolderMetadata)
+    filterEvents("manifest-sha256.txt") should equal(expectedManifest)
+    filterEvents("tagmanifest-sha256.txt") should equal(expectedTagManifest)
+
   }
 
   "the lambda" should "start the state machine execution with the correct parameters" in {
-    stubAWSRequests(inputBucket)
-    IngestParserTest().handleRequest(event, null)
-
-    val sfnEvent = sfnServer.getAllServeEvents.asScala.head
-    val sfnRequest = read[SFNRequest](sfnEvent.getRequest.getBodyAsString)
+    val sfnRequest = runLambdaAndReturnStepFunctionRequest()
     val input = read[Output](sfnRequest.input)
 
     sfnRequest.stateMachineArn should equal("arn:aws:states:eu-west-2:123456789:stateMachine:StateMachineName")
-    sfnRequest.name should equal(s"TEST-REFERENCE-${uuids(4)}")
+    sfnRequest.name should equal(s"TEST-REFERENCE-${uuids(4)._1}")
 
     input.series.get should equal("TEST SERIES")
     input.department.get should equal("TEST")
@@ -194,15 +245,12 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   "the lambda" should "start the state machine execution with a null department and series if the cite is missing" in {
     val inputJson =
       s"""{"parameters":{"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},"PARSER":{"uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}"""
-    stubAWSRequests(inputBucket, metadataJsonOpt = Option(inputJson))
-    IngestParserTest().handleRequest(event, null)
 
-    val sfnEvent = sfnServer.getAllServeEvents.asScala.head
-    val sfnRequest = read[SFNRequest](sfnEvent.getRequest.getBodyAsString)
+    val sfnRequest = runLambdaAndReturnStepFunctionRequest(Option(inputJson))
     val input = read[Output](sfnRequest.input)
 
     sfnRequest.stateMachineArn should equal("arn:aws:states:eu-west-2:123456789:stateMachine:StateMachineName")
-    sfnRequest.name should equal(s"TEST-REFERENCE-${uuids(4)}")
+    sfnRequest.name should equal(s"TEST-REFERENCE-${uuids(4)._1}")
 
     input.series should equal(None)
     input.department should equal(None)
@@ -214,15 +262,12 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   "the lambda" should "start the state machine execution with a null department and series if the cite is null" in {
     val inputJson =
       s"""{"parameters":{"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},"PARSER":{"cite": null, "uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}"""
-    stubAWSRequests(inputBucket, metadataJsonOpt = Option(inputJson))
-    IngestParserTest().handleRequest(event, null)
 
-    val sfnEvent = sfnServer.getAllServeEvents.asScala.head
-    val sfnRequest = read[SFNRequest](sfnEvent.getRequest.getBodyAsString)
+    val sfnRequest = runLambdaAndReturnStepFunctionRequest(Option(inputJson))
     val input = read[Output](sfnRequest.input)
 
     sfnRequest.stateMachineArn should equal("arn:aws:states:eu-west-2:123456789:stateMachine:StateMachineName")
-    sfnRequest.name should equal(s"TEST-REFERENCE-${uuids(4)}")
+    sfnRequest.name should equal(s"TEST-REFERENCE-${uuids(4)._1}")
 
     input.series should equal(None)
     input.department should equal(None)

@@ -207,7 +207,7 @@ class FileProcessor(
       fileMetadataChecksum: String,
       bagitTxtChecksum: String,
       manifestSha256Checksum: String,
-      bagInfoChecksum: Option[String]
+      potentialBagInfoChecksum: Option[String]
   ): IO[String] = {
     val tagManifestMap = Map(
       "folder-metadata.csv" -> folderMetadataChecksum,
@@ -216,7 +216,7 @@ class FileProcessor(
       "bagit.txt" -> bagitTxtChecksum,
       "manifest-sha256.txt" -> manifestSha256Checksum
     )
-    val tagManifest = bagInfoChecksum
+    val tagManifest = potentialBagInfoChecksum
       .map(cs => tagManifestMap + ("bag-info.txt" -> cs))
       .getOrElse(tagManifestMap)
       .toSeq

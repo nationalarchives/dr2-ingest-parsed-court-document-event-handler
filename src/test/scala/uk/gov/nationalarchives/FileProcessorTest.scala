@@ -183,7 +183,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     ex.getMessage should equal("Error downloading metadata file")
   }
 
-  val departmentSeriesTable: TableFor3[Option[String], Option[String], Boolean] = Table(
+  val departmentAndSeriesTable: TableFor3[Option[String], Option[String], Boolean] = Table(
     ("department", "series", "includeBagInfo"),
     (Option("Department"), Option("Series"), true),
     (Option("Department"), None, false),
@@ -191,7 +191,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     (None, None, false)
   )
 
-  forAll(departmentSeriesTable) { (department, series, includeBagInfo) =>
+  forAll(departmentAndSeriesTable) { (department, series, includeBagInfo) =>
     "createMetadataFiles" should s"upload the correct bagit files for $department and $series" in {
       val fileId = UUID.randomUUID()
       val metadataId = UUID.randomUUID()
