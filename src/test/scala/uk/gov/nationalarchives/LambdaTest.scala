@@ -91,7 +91,6 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     override val s3: DAS3Client[IO] = DAS3Client[IO](s3AsyncClient)
     override val sfn: DASFNClient[IO] = new DASFNClient(sfnAsyncClient)
     override val seriesMapper: SeriesMapper = new SeriesMapper(Set(Court("cite", "TEST", "TEST SERIES")))
-    var count: Int = -1
     val uuidsIterator: Iterator[String] = uuidsAndChecksum.map(_._1).iterator
 
     override val randomUuidGenerator: () => UUID = () => UUID.fromString(uuidsIterator.next())
@@ -135,10 +134,10 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
       s"""{"parameters":{"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}"""
     )
 
-    metadataFilesAndChecksums.foreach { file =>
+    metadataFilesAndChecksums.foreach { case (file, checksum) =>
       s3Server.stubFor(
-        put(urlEqualTo(s"/$testOutputBucket/$reference/${file._1}"))
-          .willReturn(ok().withHeader("x-amz-checksum-sha256", convertChecksumToS3Format(file._2)))
+        put(urlEqualTo(s"/$testOutputBucket/$reference/$file"))
+          .willReturn(ok().withHeader("x-amz-checksum-sha256", convertChecksumToS3Format(checksum)))
       )
     }
 
