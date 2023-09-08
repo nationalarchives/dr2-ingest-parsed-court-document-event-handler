@@ -30,25 +30,16 @@ class SeriesMapperTest extends AnyFlatSpec with MockitoSugar with TableDrivenPro
   forAll(courtToSeries) { (court, series) =>
     "createOutput" should s"return $series for court $court" in {
       val seriesMapper = SeriesMapper()
-      val output = seriesMapper.createOutput("upload", "batch", s"2023 $court SUFFIX").unsafeRunSync()
-      output.department should equal(series.split(" ").head)
-      output.series should equal(series)
+      val output = seriesMapper.createOutput("upload", "batch", Option(s"2023 $court SUFFIX")).unsafeRunSync()
+      output.department.get should equal(series.split(" ").head)
+      output.series.get should equal(series)
     }
-  }
-
-  "createOutput" should "return the correct output if one series is found" in {
-    val seriesMapper = SeriesMapper()
-    val ex = intercept[RuntimeException] {
-      seriesMapper.createOutput("upload", "batch", s"2023 EWFC UKEAT").unsafeRunSync()
-    }
-    val expectedMessage = s"2 entries found when looking up series for cite 2023 EWFC UKEAT and batchId batch"
-    ex.getMessage should equal(expectedMessage)
   }
 
   "createOutput" should "return an error if more than one series is found" in {
     val seriesMapper = SeriesMapper()
     val ex = intercept[RuntimeException] {
-      seriesMapper.createOutput("upload", "batch", s"2023 EWFC UKEAT").unsafeRunSync()
+      seriesMapper.createOutput("upload", "batch", Option(s"2023 EWFC UKEAT")).unsafeRunSync()
     }
     val expectedMessage = s"2 entries found when looking up series for cite 2023 EWFC UKEAT and batchId batch"
     ex.getMessage should equal(expectedMessage)
@@ -57,9 +48,17 @@ class SeriesMapperTest extends AnyFlatSpec with MockitoSugar with TableDrivenPro
   "createOutput" should "return an error if no series are found" in {
     val seriesMapper = SeriesMapper()
     val ex = intercept[RuntimeException] {
-      seriesMapper.createOutput("upload", "batch", s"2023 PREFIX SUFFIX").unsafeRunSync()
+      seriesMapper.createOutput("upload", "batch", Option(s"2023 PREFIX SUFFIX")).unsafeRunSync()
     }
     val expectedMessage = s"0 entries found when looking up series for cite 2023 PREFIX SUFFIX and batchId batch"
     ex.getMessage should equal(expectedMessage)
+  }
+
+  "createOutput" should "return an empty department and series if the cite is missing" in {
+    val seriesMapper = SeriesMapper()
+    val output = seriesMapper.createOutput("upload", "batch", None).unsafeRunSync()
+
+    output.series should equal(None)
+    output.department should equal(None)
   }
 }

@@ -3,6 +3,7 @@ package uk.gov.nationalarchives
 import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.effect.kernel.Resource
+import cats.implicits._
 import fs2.compression.Compression
 import fs2.data.csv.{Row, lowlevel}
 import fs2.interop.reactivestreams._
@@ -10,6 +11,7 @@ import fs2.io._
 import fs2.{Chunk, Pipe, Stream, text}
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import ujson.{Null, Value}
 import uk.gov.nationalarchives.FileProcessor._
 import upickle.default._
 
@@ -58,8 +60,8 @@ class FileProcessor(
       fileInfo: FileInfo,
       metadataFileInfo: FileInfo,
       cite: String,
-      department: String,
-      series: String
+      department: Option[String],
+      series: Option[String]
   ): IO[String] = {
     val title = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
     val folderMetadataHeader = NonEmptyList("identifier", List("parentPath", "name", "title"))
@@ -106,8 +108,7 @@ class FileProcessor(
         "manifest-sha256.txt",
         manifestString.getBytes.length
       )
-      bagInfoString = s"Department: $department\nSeries: $series"
-      bagInfoChecksum <- uploadAsFile(bagInfoString, "bag-info.txt", bagInfoString.getBytes.length)
+      bagInfoChecksum <- createBagInfo(department, series)
       tagManifest <- createTagManifest(
         folderMetadataChecksum,
         assetMetadataChecksum,
@@ -118,6 +119,16 @@ class FileProcessor(
       )
     } yield tagManifest
   }
+
+  private def createBagInfo(departmentOpt: Option[String], seriesOpt: Option[String]): IO[Option[String]] = {
+    for {
+      department <- departmentOpt
+      series <- seriesOpt
+    } yield {
+      val bagInfoString = s"Department: $department\nSeries: $series"
+      uploadAsFile(bagInfoString, "bag-info.txt", bagInfoString.getBytes.length)
+    }
+  }.sequence
 
   private def extractMetadataFromJson(str: Stream[IO, Byte]): Stream[IO, TREMetadata] = {
     str
@@ -196,16 +207,19 @@ class FileProcessor(
       fileMetadataChecksum: String,
       bagitTxtChecksum: String,
       manifestSha256Checksum: String,
-      bagInfoChecksum: String
+      potentialBagInfoChecksum: Option[String]
   ): IO[String] = {
-    val tagManifest = Map(
+    val tagManifestMap = Map(
       "folder-metadata.csv" -> folderMetadataChecksum,
       "asset-metadata.csv" -> assetMetadataChecksum,
       "file-metadata.csv" -> fileMetadataChecksum,
       "bagit.txt" -> bagitTxtChecksum,
-      "manifest-sha256.txt" -> manifestSha256Checksum,
-      "bag-info.txt" -> bagInfoChecksum
-    ).toSeq
+      "manifest-sha256.txt" -> manifestSha256Checksum
+    )
+    val tagManifest = potentialBagInfoChecksum
+      .map(cs => tagManifestMap + ("bag-info.txt" -> cs))
+      .getOrElse(tagManifestMap)
+      .toSeq
       .sortBy(_._1)
       .map { case (file, checksum) =>
         s"$checksum $file"
@@ -231,6 +245,11 @@ object FileProcessor {
     dateString => LocalDate.parse(dateString)
   )
 
+  implicit def OptionReader[T: Reader]: Reader[Option[T]] = reader[Value].map[Option[T]] {
+    case Null    => None
+    case jsValue => Some(read[T](jsValue))
+  }
+
   case class FileInfo(id: UUID, fileSize: Long, fileName: String, checksum: String)
 
   case class TREInputParameters(status: String, reference: String, s3Bucket: String, s3Key: String)
@@ -242,7 +261,7 @@ object FileProcessor {
   case class Parser(
       uri: String,
       court: String,
-      cite: String,
+      cite: Option[String] = None,
       date: LocalDate,
       name: String,
       attachments: List[String] = Nil,
