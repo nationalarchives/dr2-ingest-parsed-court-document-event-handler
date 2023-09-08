@@ -35,7 +35,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   case class SFNRequest(stateMachineArn: String, name: String, input: String)
 
   val reference = "TEST-REFERENCE"
-  val uuids: List[(String, String)] = List(
+  val uuidsAndChecksum: List[(String, String)] = List(
     ("c7e6b27f-5778-4da8-9b83-1b64bbccbd03", "71"),
     ("61ac0166-ccdf-48c4-800f-29e5fba2efda", "81"),
     ("4e6bac50-d80a-4c68-bd92-772ac9701f14", "91"),
@@ -43,7 +43,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     ("27a9a6bb-a023-4cab-8592-39b44761a30a", "B1")
   )
 
-  val metadataFiles: List[(String, String)] = List(
+  val metadataFilesAndChecksums: List[(String, String)] = List(
     ("asset-metadata.csv", "01"),
     ("bagit.txt", "11"),
     ("bag-info.txt", "21"),
@@ -92,7 +92,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     override val sfn: DASFNClient[IO] = new DASFNClient(sfnAsyncClient)
     override val seriesMapper: SeriesMapper = new SeriesMapper(Set(Court("cite", "TEST", "TEST SERIES")))
     var count: Int = -1
-    val uuidsIterator: Iterator[String] = uuids.map(_._1).iterator
+    val uuidsIterator: Iterator[String] = uuidsAndChecksum.map(_._1).iterator
 
     override val randomUuidGenerator: () => UUID = () => UUID.fromString(uuidsIterator.next())
   }
@@ -135,18 +135,17 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
       s"""{"parameters":{"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}"""
     )
 
-    metadataFiles.foreach { file =>
+    metadataFilesAndChecksums.foreach { file =>
       s3Server.stubFor(
         put(urlEqualTo(s"/$testOutputBucket/$reference/${file._1}"))
           .willReturn(ok().withHeader("x-amz-checksum-sha256", convertChecksumToS3Format(file._2)))
       )
     }
 
-    uuids.foreach { uuidAndChecksum =>
-      val uuid = uuidAndChecksum._1
+    uuidsAndChecksum.foreach { case (uuid, checksum) =>
       s3Server.stubFor(
         put(urlEqualTo(s"/$testOutputBucket/$uuid"))
-          .willReturn(ok().withHeader("x-amz-checksum-sha256", convertChecksumToS3Format(uuidAndChecksum._2)))
+          .willReturn(ok().withHeader("x-amz-checksum-sha256", convertChecksumToS3Format(checksum)))
       )
       s3Server.stubFor(
         put(urlEqualTo(s"/$testOutputBucket/$reference/data/$uuid"))
@@ -185,9 +184,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
       e.getRequest.getUrl == s"/$testOutputBucket/$reference/$name" && e.getRequest.getMethod == RequestMethod.PUT
     )
 
-    metadataFiles.map(_._1).foreach(file => countPutEvents(file) should equal(1))
-    countPutEvents(s"data/${uuids.head._1}") should equal(1)
-    countPutEvents(s"data/${uuids(1)._1}") should equal(1)
+    metadataFilesAndChecksums.map(_._1).foreach(file => countPutEvents(file) should equal(1))
+    countPutEvents(s"data/${uuidsAndChecksum.head._1}") should equal(1)
+    countPutEvents(s"data/${uuidsAndChecksum(1)._1}") should equal(1)
   }
 
   "the lambda" should "write the correct metadata files to S3" in {
@@ -233,7 +232,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     val input = read[Output](sfnRequest.input)
 
     sfnRequest.stateMachineArn should equal("arn:aws:states:eu-west-2:123456789:stateMachine:StateMachineName")
-    sfnRequest.name should equal(s"TEST-REFERENCE-${uuids(4)._1}")
+    sfnRequest.name should equal(s"TEST-REFERENCE-${uuidsAndChecksum(4)._1}")
 
     input.series.get should equal("TEST SERIES")
     input.department.get should equal("TEST")
@@ -250,7 +249,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     val input = read[Output](sfnRequest.input)
 
     sfnRequest.stateMachineArn should equal("arn:aws:states:eu-west-2:123456789:stateMachine:StateMachineName")
-    sfnRequest.name should equal(s"TEST-REFERENCE-${uuids(4)._1}")
+    sfnRequest.name should equal(s"TEST-REFERENCE-${uuidsAndChecksum(4)._1}")
 
     input.series should equal(None)
     input.department should equal(None)
@@ -267,7 +266,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     val input = read[Output](sfnRequest.input)
 
     sfnRequest.stateMachineArn should equal("arn:aws:states:eu-west-2:123456789:stateMachine:StateMachineName")
-    sfnRequest.name should equal(s"TEST-REFERENCE-${uuids(4)._1}")
+    sfnRequest.name should equal(s"TEST-REFERENCE-${uuidsAndChecksum(4)._1}")
 
     input.series should equal(None)
     input.department should equal(None)
