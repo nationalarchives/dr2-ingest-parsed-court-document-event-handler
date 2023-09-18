@@ -16,7 +16,7 @@ object Dependencies {
   lazy val commonsCompress = "org.apache.commons" % "commons-compress" % "1.23.0"
   lazy val fs2Csv = "org.gnieh" %% "fs2-data-csv" % "1.8.0"
   lazy val fs2IO = "co.fs2" %% "fs2-io" % "3.7.0"
-  lazy val upickle = "com.lihaoyi" %% "upickle" % "3.1.2"
+  lazy val upickle = "com.lihaoyi" %% "upickle" % "3.1.3"
   lazy val scalaTest = "org.scalatest" %% "scalatest" % "3.2.15"
   lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.12"
   lazy val wiremock = "com.github.tomakehurst" % "wiremock" % "2.27.2"
