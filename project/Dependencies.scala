@@ -9,7 +9,7 @@ object Dependencies {
   lazy val log4jCore = "org.apache.logging.log4j" % "log4j-core" % logbackVersion
   lazy val log4jTemplateJson = "org.apache.logging.log4j" % "log4j-layout-template-json" % logbackVersion
   lazy val lambdaCore = "com.amazonaws" % "aws-lambda-java-core" % "1.2.2"
-  lazy val lambdaJavaEvents = "com.amazonaws" % "aws-lambda-java-events" % "3.11.1"
+  lazy val lambdaJavaEvents = "com.amazonaws" % "aws-lambda-java-events" % "3.11.3"
   lazy val reactiveStreams = "co.fs2" %% "fs2-reactive-streams" % "3.7.0"
   lazy val s3Client = "uk.gov.nationalarchives" %% "da-s3-client" % daAwsClientsVersion
   lazy val sfnClient = "uk.gov.nationalarchives" %% "da-sfn-client" % daAwsClientsVersion
