@@ -13,7 +13,7 @@ object Dependencies {
   lazy val reactiveStreams = "co.fs2" %% "fs2-reactive-streams" % "3.7.0"
   lazy val s3Client = "uk.gov.nationalarchives" %% "da-s3-client" % daAwsClientsVersion
   lazy val sfnClient = "uk.gov.nationalarchives" %% "da-sfn-client" % daAwsClientsVersion
-  lazy val commonsCompress = "org.apache.commons" % "commons-compress" % "1.23.0"
+  lazy val commonsCompress = "org.apache.commons" % "commons-compress" % "1.24.0"
   lazy val fs2Csv = "org.gnieh" %% "fs2-data-csv" % "1.8.1"
   lazy val fs2IO = "co.fs2" %% "fs2-io" % "3.7.0"
   lazy val upickle = "com.lihaoyi" %% "upickle" % "3.1.2"
