@@ -10,12 +10,12 @@ object Dependencies {
   lazy val log4jTemplateJson = "org.apache.logging.log4j" % "log4j-layout-template-json" % logbackVersion
   lazy val lambdaCore = "com.amazonaws" % "aws-lambda-java-core" % "1.2.3"
   lazy val lambdaJavaEvents = "com.amazonaws" % "aws-lambda-java-events" % "3.11.3"
-  lazy val reactiveStreams = "co.fs2" %% "fs2-reactive-streams" % "3.7.0"
+  lazy val reactiveStreams = "co.fs2" %% "fs2-reactive-streams" % "3.9.2"
   lazy val s3Client = "uk.gov.nationalarchives" %% "da-s3-client" % daAwsClientsVersion
   lazy val sfnClient = "uk.gov.nationalarchives" %% "da-sfn-client" % daAwsClientsVersion
   lazy val commonsCompress = "org.apache.commons" % "commons-compress" % "1.24.0"
   lazy val fs2Csv = "org.gnieh" %% "fs2-data-csv" % "1.8.1"
-  lazy val fs2IO = "co.fs2" %% "fs2-io" % "3.7.0"
+  lazy val fs2IO = "co.fs2" %% "fs2-io" % "3.9.2"
   lazy val upickle = "com.lihaoyi" %% "upickle" % "3.1.3"
   lazy val scalaTest = "org.scalatest" %% "scalatest" % "3.2.17"
   lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.22"
