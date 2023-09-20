@@ -6,32 +6,24 @@ import com.amazonaws.services.lambda.runtime.events.SQSEvent.SQSMessage
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.http.RequestMethod
+import io.circe.{Decoder, Printer}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3AsyncClient
 import software.amazon.awssdk.services.sfn.SfnAsyncClient
-import ujson.{Null, Value}
-import uk.gov.nationalarchives.FileProcessor.{TREInput, TREInputParameters}
+import uk.gov.nationalarchives.FileProcessor._
 import uk.gov.nationalarchives.SeriesMapper.{Court, Output}
-import upickle.default._
+import io.circe.parser.decode
+import io.circe.generic.auto._
+import io.circe.syntax._
 
 import java.net.URI
 import java.util.{Base64, HexFormat, UUID}
 import scala.jdk.CollectionConverters._
 
 class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
-  implicit val treInputWriter: Writer[TREInput] = macroW[TREInput]
-  implicit val treInputParamsWriter: Writer[TREInputParameters] = macroW[TREInputParameters]
-  implicit val sfnRequestReader: Reader[SFNRequest] = macroR[SFNRequest]
-  implicit val outputReader: Reader[Output] = macroR[Output]
-
-  implicit def OptionReader[T: Reader]: Reader[Option[T]] = reader[Value].map[Option[T]] {
-    case Null    => None
-    case jsValue => Some(read[T](jsValue))
-  }
-
   case class SFNRequest(stateMachineArn: String, name: String, input: String)
 
   val reference = "TEST-REFERENCE"
@@ -44,11 +36,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   )
 
   val metadataFilesAndChecksums: List[(String, String)] = List(
-    ("asset-metadata.csv", "01"),
+    ("metadata.json", "01"),
     ("bagit.txt", "11"),
     ("bag-info.txt", "21"),
-    ("file-metadata.csv", "31"),
-    ("folder-metadata.csv", "41"),
     ("manifest-sha256.txt", "51"),
     ("tagmanifest-sha256.txt", "61")
   )
@@ -65,14 +55,18 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   val testOutputBucket = "outputBucket"
   val inputBucket = "inputBucket"
   val packageAvailable: TREInput = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
-  val event: SQSEvent = createEvent(write(packageAvailable))
+  val event: SQSEvent = createEvent(packageAvailable.asJson.printWith(Printer.noSpaces))
+
+  private def read[T](jsonString: String)(implicit enc: Decoder[T]): T = {
+    decode[T](jsonString).toOption.get
+  }
 
   private def runLambdaAndReturnStepFunctionRequest(metadataJsonOpt: Option[String] = None) = {
     stubAWSRequests(inputBucket, metadataJsonOpt = metadataJsonOpt)
     IngestParserTest().handleRequest(event, null)
 
     val sfnEvent = sfnServer.getAllServeEvents.asScala.head
-    read[SFNRequest](sfnEvent.getRequest.getBodyAsString)
+    decode[SFNRequest](sfnEvent.getRequest.getBodyAsString).toOption.get
   }
 
   case class IngestParserTest() extends Lambda {
@@ -199,28 +193,34 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
       .map(_.getBodyAsString.split("\r\n")(1).trim)
       .head
 
-    val folderId = "4e6bac50-d80a-4c68-bd92-772ac9701f14"
-    val assetId = "c2e7866e-5e94-4b4e-a49f-043ad937c18a"
-    val fileId = "c7e6b27f-5778-4da8-9b83-1b64bbccbd03"
-    val metadataFileId = "61ac0166-ccdf-48c4-800f-29e5fba2efda"
-
-    val expectedAssetMetadata = s"identifier,parentPath,title\n$assetId,$folderId,Test"
+    val folderId = UUID.fromString("4e6bac50-d80a-4c68-bd92-772ac9701f14")
+    val assetId = UUID.fromString("c2e7866e-5e94-4b4e-a49f-043ad937c18a")
+    val fileId = UUID.fromString("c7e6b27f-5778-4da8-9b83-1b64bbccbd03")
+    val metadataFileId = UUID.fromString("61ac0166-ccdf-48c4-800f-29e5fba2efda")
+    val expectedAssetMetadata = BagitMetadataObject(assetId, folderId.toString, "Test", Asset)
     val expectedBagitTxt = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
     val expectedBagInfo = "Department: TEST\nSeries: TEST SERIES"
-    val expectedFileMetadata =
-      s"""identifier,parentPath,name,fileSize,title
-         |$fileId,$folderId/$assetId,Test.docx,15684,Test
-         |$metadataFileId,$folderId/$assetId,TRE-TEST-REFERENCE-metadata.json,215,""".stripMargin
-    val expectedFolderMetadata = s"identifier,parentPath,name,title\n$folderId,,cite,Test"
+    val expectedFileMetadata = List(
+      BagitMetadataObject(fileId, s"$folderId/$assetId", "Test", File, Option("Test.docx"), Option(15684)),
+      BagitMetadataObject(
+        metadataFileId,
+        s"$folderId/$assetId",
+        "",
+        File,
+        Option("TRE-TEST-REFERENCE-metadata.json"),
+        Option(215)
+      )
+    )
+    val expectedFolderMetadata = BagitMetadataObject(folderId, "", "Test", ArchiveFolder, Option("cite"), None)
+    val expectedMetadata = List(expectedFolderMetadata, expectedAssetMetadata) ++ expectedFileMetadata
     val expectedManifest = s"abcde data/$fileId\n81 data/$metadataFileId"
     val expectedTagManifest =
-      "01 asset-metadata.csv\n21 bag-info.txt\n11 bagit.txt\n31 file-metadata.csv\n41 folder-metadata.csv\n51 manifest-sha256.txt"
+      "21 bag-info.txt\n11 bagit.txt\n51 manifest-sha256.txt\n01 metadata.json"
 
-    filterEvents("asset-metadata.csv") should equal(expectedAssetMetadata)
+    val metadataFromResponse = read[List[BagitMetadataObject]](filterEvents("metadata.json"))
+    metadataFromResponse should equal(expectedMetadata)
     filterEvents("bagit.txt") should equal(expectedBagitTxt)
     filterEvents("bag-info.txt") should equal(expectedBagInfo)
-    filterEvents("file-metadata.csv") should equal(expectedFileMetadata)
-    filterEvents("folder-metadata.csv") should equal(expectedFolderMetadata)
     filterEvents("manifest-sha256.txt") should equal(expectedManifest)
     filterEvents("tagmanifest-sha256.txt") should equal(expectedTagManifest)
 
@@ -279,7 +279,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     val ex = intercept[Exception] {
       IngestParserTest().handleRequest(event, null)
     }
-    ex.getMessage should equal("missing keys in dictionary: parameters at index 1")
+    ex.getMessage should equal("DecodingFailure at .parameters: Missing required field")
   }
 
   "the lambda" should "error if the json in the metadata file is invalid" in {
@@ -287,7 +287,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     val ex = intercept[Exception] {
       IngestParserTest().handleRequest(event, null)
     }
-    ex.getMessage should equal("missing keys in dictionary: parameters at index 1")
+    ex.getMessage should equal("DecodingFailure at .parameters: Missing required field")
   }
 
   "the lambda" should "error if S3 is unavailable" in {

@@ -2,7 +2,6 @@ package uk.gov.nationalarchives
 
 import cats.effect._
 import uk.gov.nationalarchives.SeriesMapper._
-import upickle.default._
 
 class SeriesMapper(courts: Set[Court]) {
   def createOutput(uploadBucket: String, batchId: String, potentialCite: Option[String]): IO[Output] = {
@@ -27,8 +26,6 @@ class SeriesMapper(courts: Set[Court]) {
 }
 
 object SeriesMapper {
-  implicit val outputWriter: Writer[Output] = macroW[Output]
-
   case class Output(
       batchId: String,
       s3Bucket: String,

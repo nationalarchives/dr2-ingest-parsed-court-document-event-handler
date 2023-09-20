@@ -10,8 +10,7 @@ import pureconfig._
 import pureconfig.generic.auto._
 import pureconfig.module.catseffect.syntax._
 import uk.gov.nationalarchives.FileProcessor._
-import upickle.default._
-
+import io.circe.parser.decode
 import java.util.UUID
 import scala.jdk.CollectionConverters._
 
@@ -23,14 +22,12 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
 
   override def handleRequest(input: SQSEvent, context: Context): Unit = {
     input.getRecords.asScala.toList.map { record =>
-      val treInput = read[TREInput](record.getBody)
-      val inputBucket = treInput.parameters.s3Bucket
-      val batchRef = treInput.parameters.reference
-
       for {
+        treInput <- IO.fromEither(decode[TREInput](record.getBody))
+        batchRef = treInput.parameters.reference
         config <- ConfigSource.default.loadF[IO, Config]()
         outputBucket = config.outputBucket
-        fileProcessor = new FileProcessor(inputBucket, outputBucket, batchRef, s3, randomUuidGenerator)
+        fileProcessor = new FileProcessor(treInput.parameters.s3Bucket, outputBucket, batchRef, s3, randomUuidGenerator)
         fileNameToFileInfo <- fileProcessor.copyFilesFromDownloadToUploadBucket(treInput.parameters.s3Key)
 
         metadataFileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$batchRef/TRE-$batchRef-metadata.json"))(

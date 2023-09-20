@@ -1,24 +1,25 @@
 package uk.gov.nationalarchives
 
-import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.effect.kernel.Resource
 import cats.implicits._
 import fs2.compression.Compression
-import fs2.data.csv.{Row, lowlevel}
 import fs2.interop.reactivestreams._
 import fs2.io._
 import fs2.{Chunk, Pipe, Stream, text}
+import io.circe.generic.auto._
+import io.circe.generic.extras.Configuration
+import io.circe.generic.extras.semiauto.{deriveConfiguredDecoder, deriveConfiguredEncoder}
+import io.circe.parser.decode
+import io.circe.syntax._
+import io.circe.{Decoder, Encoder, Printer}
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
-import ujson.{Null, Value}
-import uk.gov.nationalarchives.FileProcessor._
-import upickle.default._
+import uk.gov.nationalarchives.FileProcessor.{ArchiveFolder, _}
 
 import java.io.{BufferedInputStream, InputStream}
 import java.nio.ByteBuffer
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import java.util.{Base64, UUID}
 
 class FileProcessor(
@@ -64,55 +65,32 @@ class FileProcessor(
       series: Option[String]
   ): IO[String] = {
     val title = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
-    val folderMetadataHeader = NonEmptyList("identifier", List("parentPath", "name", "title"))
-    val assetMetadataHeader = NonEmptyList("identifier", List("parentPath", "title"))
-    val fileMetadataHeader = NonEmptyList("identifier", List("parentPath", "name", "fileSize", "title"))
-    val folderPath = uuidGenerator()
+    val folderId = uuidGenerator()
     val assetId = uuidGenerator()
-    val assetPath = s"$folderPath/$assetId"
-    val folderMetadataRow = Row(NonEmptyList(folderPath.toString, List("", cite, title)))
-    val assetMetadataRow = Row(NonEmptyList(assetId.toString, List(folderPath.toString, title)))
-    val fileRow = Row(
-      NonEmptyList(fileInfo.id.toString, List(assetPath, fileInfo.fileName, fileInfo.fileSize.toString, title))
+    val assetPath = s"$folderId/$assetId"
+    val folderMetadataObject = BagitMetadataObject(folderId, "", title, ArchiveFolder, Option(cite), None)
+    val assetMetadataObject = BagitMetadataObject(assetId, folderId.toString, title, Asset)
+    val fileObject =
+      BagitMetadataObject(fileInfo.id, assetPath, title, File, Option(fileInfo.fileName), fileInfo.fileSize.some)
+    val fileMetadataObject = BagitMetadataObject(
+      metadataFileInfo.id,
+      assetPath,
+      "",
+      File,
+      metadataFileInfo.fileName.some,
+      metadataFileInfo.fileSize.some
     )
-    val fileMetadataRow = Row(
-      NonEmptyList(
-        metadataFileInfo.id.toString,
-        List(assetPath, metadataFileInfo.fileName, metadataFileInfo.fileSize.toString, "")
-      )
-    )
-    val bagitTxtRow = Row(NonEmptyList("Tag-File-Character-Encoding: UTF-8", Nil))
-    val bagitTxtHeader = NonEmptyList("BagIt-Version: 1.0", Nil)
-
+    val metadata = List(folderMetadataObject, assetMetadataObject, fileObject, fileMetadataObject)
+    val bagitString = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
     for {
-      folderMetadataChecksum <- createAndUploadFile(
-        "folder-metadata.csv",
-        folderMetadataRow :: Nil,
-        folderMetadataHeader
-      )
-      assetMetadataChecksum <- createAndUploadFile(
-        "asset-metadata.csv",
-        assetMetadataRow :: Nil,
-        assetMetadataHeader
-      )
-      fileMetadataChecksum <- createAndUploadFile(
-        "file-metadata.csv",
-        List(fileRow, fileMetadataRow),
-        fileMetadataHeader
-      )
-      bagitTxtChecksum <- createAndUploadFile("bagit.txt", bagitTxtRow :: Nil, bagitTxtHeader)
+      metadataChecksum <- createAndUploadMetadata(metadata)
+      bagitTxtChecksum <- uploadAsFile(bagitString, "bagit.txt")
       manifestString =
         s"${fileInfo.checksum} data/${fileInfo.id}\n${metadataFileInfo.checksum} data/${metadataFileInfo.id}"
-      manifestSha256Checksum <- uploadAsFile(
-        manifestString,
-        "manifest-sha256.txt",
-        manifestString.getBytes.length
-      )
+      manifestSha256Checksum <- uploadAsFile(manifestString, "manifest-sha256.txt")
       bagInfoChecksum <- createBagInfo(department, series)
       tagManifest <- createTagManifest(
-        folderMetadataChecksum,
-        assetMetadataChecksum,
-        fileMetadataChecksum,
+        metadataChecksum,
         bagitTxtChecksum,
         manifestSha256Checksum,
         bagInfoChecksum
@@ -126,15 +104,15 @@ class FileProcessor(
       series <- seriesOpt
     } yield {
       val bagInfoString = s"Department: $department\nSeries: $series"
-      uploadAsFile(bagInfoString, "bag-info.txt", bagInfoString.getBytes.length)
+      uploadAsFile(bagInfoString, "bag-info.txt")
     }
   }.sequence
 
   private def extractMetadataFromJson(str: Stream[IO, Byte]): Stream[IO, TREMetadata] = {
     str
       .through(text.utf8.decode)
-      .map { jsonString =>
-        read[TREMetadata](jsonString)
+      .flatMap { jsonString =>
+        Stream.fromEither[IO](decode[TREMetadata](jsonString))
       }
   }
 
@@ -174,26 +152,25 @@ class FileProcessor(
       .flatMap(unarchiveAndUploadToS3)
   }
 
-  private def uploadAsFile(fileContent: String, key: String, fileSize: Long) = {
+  private def uploadAsFile(fileContent: String, key: String) = {
     Stream
       .eval(IO(fileContent))
       .map(s => ByteBuffer.wrap(s.getBytes()))
       .toUnicastPublisher
       .use { pub =>
-        s3.upload(uploadBucket, s"$consignmentRef/$key", fileSize, pub)
+        s3.upload(uploadBucket, s"$consignmentRef/$key", fileContent.getBytes.length, pub)
       }
       .map(_.response().checksumSHA256())
       .map(checksumToString)
   }
 
-  private def createAndUploadFile(key: String, rows: List[Row], header: NonEmptyList[String]): IO[String] = {
+  private def createAndUploadMetadata(metadata: List[BagitMetadataObject]): IO[String] = {
     Stream
-      .emits[IO, Row](rows)
-      .through(lowlevel.writeWithHeaders(header))
-      .through(lowlevel.toRowStrings())
+      .emit[IO, List[BagitMetadataObject]](metadata)
+      .through(_.map(_.asJson.printWith(Printer.noSpaces)))
       .compile
       .string
-      .flatMap(s => uploadAsFile(s, key, s.getBytes.length))
+      .flatMap(s => uploadAsFile(s, "metadata.json"))
   }
 
   private def checksumToString(checksum: String): String =
@@ -202,17 +179,13 @@ class FileProcessor(
       .getOrElse("")
 
   private def createTagManifest(
-      folderMetadataChecksum: String,
-      assetMetadataChecksum: String,
-      fileMetadataChecksum: String,
+      metadataChecksum: String,
       bagitTxtChecksum: String,
       manifestSha256Checksum: String,
       potentialBagInfoChecksum: Option[String]
   ): IO[String] = {
     val tagManifestMap = Map(
-      "folder-metadata.csv" -> folderMetadataChecksum,
-      "asset-metadata.csv" -> assetMetadataChecksum,
-      "file-metadata.csv" -> fileMetadataChecksum,
+      "metadata.json" -> metadataChecksum,
       "bagit.txt" -> bagitTxtChecksum,
       "manifest-sha256.txt" -> manifestSha256Checksum
     )
@@ -225,30 +198,36 @@ class FileProcessor(
         s"$checksum $file"
       }
       .mkString("\n")
-    uploadAsFile(tagManifest, "tagmanifest-sha256.txt", tagManifest.getBytes.length)
+    uploadAsFile(tagManifest, "tagmanifest-sha256.txt")
   }
 }
 
 object FileProcessor {
   private val chunkSize: Int = 1024 * 64
+  implicit val customConfig: Configuration = Configuration.default.withDefaults
+  implicit val parserDecoder: Decoder[Parser] = deriveConfiguredDecoder
+  implicit val bagitMetadataEncoder: Encoder[BagitMetadataObject] = deriveConfiguredEncoder
+  implicit val additionalMetadataEncoder: Encoder[AdditionalMetadata] = deriveConfiguredEncoder
 
-  implicit val treParamsReader: Reader[TREParams] = macroR[TREParams]
-  implicit val jsonReader: Reader[TREMetadata] = macroR[TREMetadata]
-  implicit val treInputReader: Reader[TREInput] = macroR[TREInput]
-  implicit val treInputParamsReader: Reader[TREInputParameters] = macroR[TREInputParameters]
+  sealed trait Type
 
-  implicit val payloadReader: Reader[Payload] = macroR[Payload]
-  implicit val parameterReader: Reader[TREMetadataParameters] = macroR
-  implicit val parserReader: Reader[Parser] = macroR
-  implicit val dateReader: Reader[LocalDate] = readwriter[String].bimap[LocalDate](
-    date => date.format(DateTimeFormatter.ISO_LOCAL_DATE),
-    dateString => LocalDate.parse(dateString)
+  case object ArchiveFolder extends Type
+
+  case object Asset extends Type
+
+  case object File extends Type
+
+  case class AdditionalMetadata(key: String, value: String)
+
+  case class BagitMetadataObject(
+      identifier: UUID,
+      parentPath: String,
+      title: String,
+      `type`: Type,
+      name: Option[String] = None,
+      fileSize: Option[Long] = None,
+      additionalMetadata: List[AdditionalMetadata] = Nil
   )
-
-  implicit def OptionReader[T: Reader]: Reader[Option[T]] = reader[Value].map[Option[T]] {
-    case Null    => None
-    case jsValue => Some(read[T](jsValue))
-  }
 
   case class FileInfo(id: UUID, fileSize: Long, fileName: String, checksum: String)
 

@@ -14,8 +14,8 @@ import reactor.core.publisher.Flux
 import software.amazon.awssdk.services.s3.model.PutObjectResponse
 import software.amazon.awssdk.transfer.s3.model.CompletedUpload
 import uk.gov.nationalarchives.FileProcessor._
-import upickle.default._
-
+import io.circe.parser.decode
+import io.circe.generic.auto._
 import java.nio.ByteBuffer
 import java.util.{Base64, HexFormat, UUID}
 
@@ -148,7 +148,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     val metadataId = UUID.randomUUID()
     when(s3.download(ArgumentMatchers.eq("upload"), ArgumentMatchers.eq(metadataId.toString)))
       .thenReturn(IO(downloadResponse))
-    val expectedMetadata = read[TREMetadata](metadataJson)
+    val expectedMetadata = decode[TREMetadata](metadataJson).toOption.get
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
 
     val res = fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
@@ -167,7 +167,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     val ex = intercept[Exception] {
       fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
     }
-    ex.getMessage should equal("""expected json value got "i" at index 0""")
+    ex.getMessage should equal("""expected json value got 'invali...' (line 1, column 1)""")
   }
 
   "readJsonFromPackage" should "return an error if the download from s3 fails" in {
@@ -199,46 +199,41 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
       val folderId = uuids.head
       val assetId = uuids.last
       val folderString =
-        s"""identifier,parentPath,name,title
-           |$folderId,,TEST-CITE,
-           |""".stripMargin
+        s"""{"identifier":"$folderId","parentPath":"","title":"","type":{"ArchiveFolder":{}},
+           |"name":"TEST-CITE","fileSize":null,"additionalMetadata":[]}""".stripMargin.replace("\n", "")
+
       val assetString =
-        s"""identifier,parentPath,title
-           |$assetId,$folderId,
-           |""".stripMargin
+        s"""{"identifier":"$assetId","parentPath":"$folderId","title":"",
+           |"type":{"Asset":{}},"name":null,"fileSize":null,"additionalMetadata":[]}""".stripMargin.replace("\n", "")
 
       val fileString =
-        s"""identifier,parentPath,name,fileSize,title
-           |$fileId,$folderId/$assetId,fileName,1,
-           |$metadataId,$folderId/$assetId,metadataFileName,2,
-           |""".stripMargin
+        s"""{"identifier":"$fileId","parentPath":"$folderId/$assetId","title":"","type":{"File":{}},"name":"fileName","fileSize":1,"additionalMetadata":[]},
+           |{"identifier":"$metadataId","parentPath":"$folderId/$assetId","title":"","type":{"File":{}},"name":"metadataFileName","fileSize":2,"additionalMetadata":[]}""".stripMargin
+          .replaceAll("\n", "")
+
+      val metadataJsonString = s"[$folderString,$assetString,$fileString]"
 
       val bagitString =
         """BagIt-Version: 1.0
-          |Tag-File-Character-Encoding: UTF-8
-          |""".stripMargin
+          |Tag-File-Character-Encoding: UTF-8""".stripMargin
 
       val manifestString =
         s"""fileChecksum data/$fileId
            |metadataChecksum data/$metadataId""".stripMargin
 
-      val folderMetadataChecksum = "989680"
-      val assetMetadataChecksum = "989681"
-      val fileMetadataChecksum = "989682"
+      val metadataChecksum = "989681"
       val bagitChecksum = "989683"
       val manifestChecksum = "989684"
       val bagInfoChecksum = "989685"
       val tagManifestChecksum = "989686"
 
       val tagManifest = List(
-        s"$assetMetadataChecksum asset-metadata.csv",
         s"$bagitChecksum bagit.txt",
-        s"$fileMetadataChecksum file-metadata.csv",
-        s"$folderMetadataChecksum folder-metadata.csv",
-        s"$manifestChecksum manifest-sha256.txt"
+        s"$manifestChecksum manifest-sha256.txt",
+        s"$metadataChecksum metadata.json"
       )
       val tagManifestString = (if (includeBagInfo) {
-                                 List(tagManifest.head, s"$bagInfoChecksum bag-info.txt") ++ tagManifest.tail
+                                 s"$bagInfoChecksum bag-info.txt" :: tagManifest
                                } else {
                                  tagManifest
                                }).mkString("\n")
@@ -268,9 +263,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
         publisherMatcher
       }
 
-      mockUpload("folder-metadata.csv", folderString, folderMetadataChecksum)
-      mockUpload("asset-metadata.csv", assetString, assetMetadataChecksum)
-      mockUpload("file-metadata.csv", fileString, fileMetadataChecksum)
+      mockUpload("metadata.json", metadataJsonString, metadataChecksum)
       mockUpload("bagit.txt", bagitString, bagitChecksum)
       mockUpload("manifest-sha256.txt", manifestString, manifestChecksum)
       if (includeBagInfo) {
