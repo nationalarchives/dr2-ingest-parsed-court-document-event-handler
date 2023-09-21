@@ -58,6 +58,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   val event: SQSEvent = createEvent(packageAvailable.asJson.printWith(Printer.noSpaces))
 
   private def read[T](jsonString: String)(implicit enc: Decoder[T]): T = {
+    val d = decode[T](jsonString)
     decode[T](jsonString).toOption.get
   }
 
@@ -197,27 +198,28 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     val assetId = UUID.fromString("c2e7866e-5e94-4b4e-a49f-043ad937c18a")
     val fileId = UUID.fromString("c7e6b27f-5778-4da8-9b83-1b64bbccbd03")
     val metadataFileId = UUID.fromString("61ac0166-ccdf-48c4-800f-29e5fba2efda")
-    val expectedAssetMetadata = BagitMetadataObject(assetId, folderId.toString, "Test", Asset)
+    val expectedAssetMetadata = BagitMetadataObject(assetId, Option(folderId), "Test", Asset)
     val expectedBagitTxt = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
     val expectedBagInfo = "Department: TEST\nSeries: TEST SERIES"
     val expectedFileMetadata = List(
-      BagitMetadataObject(fileId, s"$folderId/$assetId", "Test", File, Option("Test.docx"), Option(15684)),
+      BagitMetadataObject(fileId, Option(assetId), "Test", File, Option("Test.docx"), Option(15684)),
       BagitMetadataObject(
         metadataFileId,
-        s"$folderId/$assetId",
+        Option(assetId),
         "",
         File,
         Option("TRE-TEST-REFERENCE-metadata.json"),
         Option(215)
       )
     )
-    val expectedFolderMetadata = BagitMetadataObject(folderId, "", "Test", ArchiveFolder, Option("cite"), None)
-    val expectedMetadata = List(expectedFolderMetadata, expectedAssetMetadata) ++ expectedFileMetadata
+    val expectedFolderMetadata = BagitMetadataObject(folderId, None, "Test", ArchiveFolder, Option("cite"), None)
+    val expectedMetadata =
+      (List(expectedFolderMetadata, expectedAssetMetadata) ++ expectedFileMetadata).asJson.printWith(Printer.noSpaces)
     val expectedManifest = s"abcde data/$fileId\n81 data/$metadataFileId"
     val expectedTagManifest =
       "21 bag-info.txt\n11 bagit.txt\n51 manifest-sha256.txt\n01 metadata.json"
 
-    val metadataFromResponse = read[List[BagitMetadataObject]](filterEvents("metadata.json"))
+    val metadataFromResponse = filterEvents("metadata.json")
     metadataFromResponse should equal(expectedMetadata)
     filterEvents("bagit.txt") should equal(expectedBagitTxt)
     filterEvents("bag-info.txt") should equal(expectedBagInfo)

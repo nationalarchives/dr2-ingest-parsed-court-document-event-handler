@@ -12,7 +12,7 @@ import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto.{deriveConfiguredDecoder, deriveConfiguredEncoder}
 import io.circe.parser.decode
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder, Printer}
+import io.circe.{Decoder, Encoder, Json, Printer}
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import uk.gov.nationalarchives.FileProcessor.{ArchiveFolder, _}
@@ -67,14 +67,13 @@ class FileProcessor(
     val title = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
     val folderId = uuidGenerator()
     val assetId = uuidGenerator()
-    val assetPath = s"$folderId/$assetId"
-    val folderMetadataObject = BagitMetadataObject(folderId, "", title, ArchiveFolder, Option(cite), None)
-    val assetMetadataObject = BagitMetadataObject(assetId, folderId.toString, title, Asset)
+    val folderMetadataObject = BagitMetadataObject(folderId, None, title, ArchiveFolder, Option(cite), None)
+    val assetMetadataObject = BagitMetadataObject(assetId, Option(folderId), title, Asset)
     val fileObject =
-      BagitMetadataObject(fileInfo.id, assetPath, title, File, Option(fileInfo.fileName), fileInfo.fileSize.some)
+      BagitMetadataObject(fileInfo.id, Option(assetId), title, File, Option(fileInfo.fileName), fileInfo.fileSize.some)
     val fileMetadataObject = BagitMetadataObject(
       metadataFileInfo.id,
-      assetPath,
+      Option(assetId),
       "",
       File,
       metadataFileInfo.fileName.some,
@@ -209,6 +208,12 @@ object FileProcessor {
   implicit val bagitMetadataEncoder: Encoder[BagitMetadataObject] = deriveConfiguredEncoder
   implicit val additionalMetadataEncoder: Encoder[AdditionalMetadata] = deriveConfiguredEncoder
 
+  implicit val typeEncoder: Encoder[Type] = {
+    case ArchiveFolder => Json.fromString("ArchiveFolder")
+    case Asset         => Json.fromString("Asset")
+    case File          => Json.fromString("File")
+  }
+
   sealed trait Type
 
   case object ArchiveFolder extends Type
@@ -221,12 +226,11 @@ object FileProcessor {
 
   case class BagitMetadataObject(
       identifier: UUID,
-      parentPath: String,
+      parentId: Option[UUID],
       title: String,
       `type`: Type,
       name: Option[String] = None,
-      fileSize: Option[Long] = None,
-      additionalMetadata: List[AdditionalMetadata] = Nil
+      fileSize: Option[Long] = None
   )
 
   case class FileInfo(id: UUID, fileSize: Long, fileName: String, checksum: String)

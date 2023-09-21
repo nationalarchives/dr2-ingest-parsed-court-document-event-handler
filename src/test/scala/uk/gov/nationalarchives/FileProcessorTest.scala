@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import fs2.interop.reactivestreams._
 import fs2.{Chunk, Stream, text}
+import io.circe.{Decoder, HCursor}
 import org.mockito.ArgumentMatchers._
 import org.mockito.{ArgumentMatcher, ArgumentMatchers, MockitoSugar}
 import org.reactivestreams.Publisher
@@ -16,6 +17,7 @@ import software.amazon.awssdk.transfer.s3.model.CompletedUpload
 import uk.gov.nationalarchives.FileProcessor._
 import io.circe.parser.decode
 import io.circe.generic.auto._
+
 import java.nio.ByteBuffer
 import java.util.{Base64, HexFormat, UUID}
 
@@ -23,6 +25,17 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
   val testTarGz: Array[Byte] = getClass.getResourceAsStream("/files/test.tar.gz").readAllBytes()
   val publisher: Flux[ByteBuffer] = Flux.just(ByteBuffer.wrap(testTarGz))
   val reference = "TEST-REFERENCE"
+
+  implicit val typeDecoder: Decoder[Type] = (c: HCursor) =>
+    for {
+      decodedType <- c.downField("type").as[String]
+    } yield {
+      decodedType match {
+        case "ArchiveFolder" => ArchiveFolder
+        case "Asset"         => Asset
+        case "File"          => File
+      }
+    }
 
   val metadataJson =
     s"""{"parameters":{"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}"""
@@ -199,16 +212,16 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
       val folderId = uuids.head
       val assetId = uuids.last
       val folderString =
-        s"""{"identifier":"$folderId","parentPath":"","title":"","type":{"ArchiveFolder":{}},
-           |"name":"TEST-CITE","fileSize":null,"additionalMetadata":[]}""".stripMargin.replace("\n", "")
+        s"""{"identifier":"$folderId","parentId":null,"title":"","type":"ArchiveFolder",
+           |"name":"TEST-CITE","fileSize":null}""".stripMargin.replace("\n", "")
 
       val assetString =
-        s"""{"identifier":"$assetId","parentPath":"$folderId","title":"",
-           |"type":{"Asset":{}},"name":null,"fileSize":null,"additionalMetadata":[]}""".stripMargin.replace("\n", "")
+        s"""{"identifier":"$assetId","parentId":"$folderId","title":"",
+           |"type":"Asset","name":null,"fileSize":null}""".stripMargin.replace("\n", "")
 
       val fileString =
-        s"""{"identifier":"$fileId","parentPath":"$folderId/$assetId","title":"","type":{"File":{}},"name":"fileName","fileSize":1,"additionalMetadata":[]},
-           |{"identifier":"$metadataId","parentPath":"$folderId/$assetId","title":"","type":{"File":{}},"name":"metadataFileName","fileSize":2,"additionalMetadata":[]}""".stripMargin
+        s"""{"identifier":"$fileId","parentId":"$assetId","title":"","type":"File","name":"fileName","fileSize":1},
+           |{"identifier":"$metadataId","parentId":"$assetId","title":"","type":"File","name":"metadataFileName","fileSize":2}""".stripMargin
           .replaceAll("\n", "")
 
       val metadataJsonString = s"[$folderString,$assetString,$fileString]"
