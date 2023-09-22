@@ -7,8 +7,9 @@ import java.io.ByteArrayInputStream
 import scala.jdk.CollectionConverters._
 
 object LambdaRunner extends App {
+
   val json =
-    """{"parameters": {"status": "OK", "reference": "TDR-2023-RMW", "s3Bucket": "dp-sam-test-bucket", "s3Key": "TRE-TDR-2023-RMW.tar.gz"}}"""
+    """{"parameters": {"status": "OK", "reference": "TDR-2023-RMX", "s3Bucket": "dp-sam-test-bucket", "s3Key": "TRE-TDR-2023-RMW.tar.gz"}}"""
   val body =
     "{\"parameters\": {\"status\": \"OK\", \"reference\": \"TDR-2023-RMW\", \"s3Bucket\": \"intg-ingest-parsed-court-document-event-handler-test-input\", \"s3Key\": \"TRE-TDR-2023-RMW.tar.gz\"}}"
   val event = new SQSEvent()

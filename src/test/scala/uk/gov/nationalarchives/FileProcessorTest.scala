@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import fs2.interop.reactivestreams._
 import fs2.{Chunk, Stream, text}
+import io.circe.{Decoder, HCursor, Printer}
 import org.mockito.ArgumentMatchers._
 import org.mockito.{ArgumentMatcher, ArgumentMatchers, MockitoSugar}
 import org.reactivestreams.Publisher
@@ -14,7 +15,9 @@ import reactor.core.publisher.Flux
 import software.amazon.awssdk.services.s3.model.PutObjectResponse
 import software.amazon.awssdk.transfer.s3.model.CompletedUpload
 import uk.gov.nationalarchives.FileProcessor._
-import upickle.default._
+import io.circe.parser.decode
+import io.circe.generic.auto._
+import io.circe.syntax.EncoderOps
 
 import java.nio.ByteBuffer
 import java.util.{Base64, HexFormat, UUID}
@@ -24,15 +27,29 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
   val publisher: Flux[ByteBuffer] = Flux.just(ByteBuffer.wrap(testTarGz))
   val reference = "TEST-REFERENCE"
 
+  implicit val typeDecoder: Decoder[Type] = (c: HCursor) =>
+    for {
+      decodedType <- c.downField("type").as[String]
+    } yield {
+      decodedType match {
+        case "ArchiveFolder" => ArchiveFolder
+        case "Asset"         => Asset
+        case "File"          => File
+      }
+    }
+
   val metadataJson =
     s"""{"parameters":{"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}"""
 
-  private val uuids: List[String] = List("6e827e19-6a33-46c3-8730-b242c203d8c1", "49e4a726-6297-4f8e-8867-fb50bd5acd86")
+  private val uuids: List[UUID] = List(
+    UUID.fromString("6e827e19-6a33-46c3-8730-b242c203d8c1"),
+    UUID.fromString("49e4a726-6297-4f8e-8867-fb50bd5acd86")
+  )
 
   case class UUIDGenerator() {
-    val uuidsIterator: Iterator[String] = uuids.iterator
+    val uuidsIterator: Iterator[UUID] = uuids.iterator
 
-    val uuidGenerator: () => UUID = () => UUID.fromString(uuidsIterator.next())
+    val uuidGenerator: () => UUID = () => uuidsIterator.next()
   }
 
   def convertChecksumToS3Format(cs: Option[String]): String =
@@ -56,9 +73,9 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     val metadataCompletedUpload = completedUpload(Option("123456"))
 
     when(s3.download(ArgumentMatchers.eq("download"), ArgumentMatchers.eq("key"))).thenReturn(IO(publisher))
-    when(s3.upload(any[String], ArgumentMatchers.eq(uuids.head), any[Long], any[Publisher[ByteBuffer]]))
+    when(s3.upload(any[String], ArgumentMatchers.eq(uuids.head.toString), any[Long], any[Publisher[ByteBuffer]]))
       .thenReturn(IO(docxCompletedUpload))
-    when(s3.upload(any[String], ArgumentMatchers.eq(uuids.last), any[Long], any[Publisher[ByteBuffer]]))
+    when(s3.upload(any[String], ArgumentMatchers.eq(uuids.last.toString), any[Long], any[Publisher[ByteBuffer]]))
       .thenReturn(IO(metadataCompletedUpload))
 
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, generator.uuidGenerator)
@@ -71,13 +88,13 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     metadata.isDefined should be(true)
 
     val docxInfo = docx.get
-    docxInfo.id should equal(UUID.fromString(uuids.head))
+    docxInfo.id should equal(uuids.head)
     docxInfo.fileName should equal("Test.docx")
     docxInfo.fileSize should equal(15684)
     docxInfo.checksum should equal("abcdef")
 
     val metadataInfo = metadata.get
-    metadataInfo.id should equal(UUID.fromString(uuids.last))
+    metadataInfo.id should equal(uuids.last)
     metadataInfo.fileName should equal(s"TRE-$reference-metadata.json")
     metadataInfo.fileSize should equal(215)
     metadataInfo.checksum should equal("123456")
@@ -130,9 +147,9 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     val metadataCompletedUpload = completedUpload()
 
     when(s3.download(ArgumentMatchers.eq("download"), ArgumentMatchers.eq("key"))).thenReturn(IO(publisher))
-    when(s3.upload(any[String], ArgumentMatchers.eq(uuids.head), any[Long], any[Publisher[ByteBuffer]]))
+    when(s3.upload(any[String], ArgumentMatchers.eq(uuids.head.toString), any[Long], any[Publisher[ByteBuffer]]))
       .thenReturn(IO(docxCompletedUpload))
-    when(s3.upload(any[String], ArgumentMatchers.eq(uuids.last), any[Long], any[Publisher[ByteBuffer]]))
+    when(s3.upload(any[String], ArgumentMatchers.eq(uuids.last.toString), any[Long], any[Publisher[ByteBuffer]]))
       .thenReturn(IO(metadataCompletedUpload))
 
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, generator.uuidGenerator)
@@ -148,7 +165,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     val metadataId = UUID.randomUUID()
     when(s3.download(ArgumentMatchers.eq("upload"), ArgumentMatchers.eq(metadataId.toString)))
       .thenReturn(IO(downloadResponse))
-    val expectedMetadata = read[TREMetadata](metadataJson)
+    val expectedMetadata = decode[TREMetadata](metadataJson).toOption.get
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
 
     val res = fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
@@ -167,7 +184,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     val ex = intercept[Exception] {
       fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
     }
-    ex.getMessage should equal("""expected json value got "i" at index 0""")
+    ex.getMessage should equal("""expected json value got 'invali...' (line 1, column 1)""")
   }
 
   "readJsonFromPackage" should "return an error if the download from s3 fails" in {
@@ -198,47 +215,43 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
       val s3 = mock[DAS3Client[IO]]
       val folderId = uuids.head
       val assetId = uuids.last
-      val folderString =
-        s"""identifier,parentPath,name,title
-           |$folderId,,TEST-CITE,
-           |""".stripMargin
-      val assetString =
-        s"""identifier,parentPath,title
-           |$assetId,$folderId,
-           |""".stripMargin
+      def bagitMetadataObject(
+          id: UUID,
+          `type`: Type,
+          name: Option[String] = None,
+          parentId: Option[UUID] = None,
+          fileSize: Option[Long] = None
+      ) =
+        BagitMetadataObject(id, parentId, "", `type`, name, fileSize)
+      val folder = bagitMetadataObject(folderId, ArchiveFolder, Option("TEST-CITE"))
+      val asset = bagitMetadataObject(assetId, Asset, parentId = Option(folderId))
+      val files = List(
+        bagitMetadataObject(fileId, File, Option("fileName"), Option(assetId), Option(1)),
+        bagitMetadataObject(metadataId, File, Option("metadataFileName"), Option(assetId), Option(2))
+      )
+      val metadataJsonString = (List(folder, asset) ++ files).asJson.printWith(Printer.noSpaces)
 
-      val fileString =
-        s"""identifier,parentPath,name,fileSize,title
-           |$fileId,$folderId/$assetId,fileName,1,
-           |$metadataId,$folderId/$assetId,metadataFileName,2,
-           |""".stripMargin
-
-      val bagitString =
+      val bagitTxtContent =
         """BagIt-Version: 1.0
-          |Tag-File-Character-Encoding: UTF-8
-          |""".stripMargin
+          |Tag-File-Character-Encoding: UTF-8""".stripMargin
 
       val manifestString =
         s"""fileChecksum data/$fileId
            |metadataChecksum data/$metadataId""".stripMargin
 
-      val folderMetadataChecksum = "989680"
-      val assetMetadataChecksum = "989681"
-      val fileMetadataChecksum = "989682"
+      val metadataChecksum = "989681"
       val bagitChecksum = "989683"
       val manifestChecksum = "989684"
       val bagInfoChecksum = "989685"
       val tagManifestChecksum = "989686"
 
       val tagManifest = List(
-        s"$assetMetadataChecksum asset-metadata.csv",
         s"$bagitChecksum bagit.txt",
-        s"$fileMetadataChecksum file-metadata.csv",
-        s"$folderMetadataChecksum folder-metadata.csv",
-        s"$manifestChecksum manifest-sha256.txt"
+        s"$manifestChecksum manifest-sha256.txt",
+        s"$metadataChecksum metadata.json"
       )
       val tagManifestString = (if (includeBagInfo) {
-                                 List(tagManifest.head, s"$bagInfoChecksum bag-info.txt") ++ tagManifest.tail
+                                 s"$bagInfoChecksum bag-info.txt" :: tagManifest
                                } else {
                                  tagManifest
                                }).mkString("\n")
@@ -268,10 +281,8 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
         publisherMatcher
       }
 
-      mockUpload("folder-metadata.csv", folderString, folderMetadataChecksum)
-      mockUpload("asset-metadata.csv", assetString, assetMetadataChecksum)
-      mockUpload("file-metadata.csv", fileString, fileMetadataChecksum)
-      mockUpload("bagit.txt", bagitString, bagitChecksum)
+      mockUpload("metadata.json", metadataJsonString, metadataChecksum)
+      mockUpload("bagit.txt", bagitTxtContent, bagitChecksum)
       mockUpload("manifest-sha256.txt", manifestString, manifestChecksum)
       if (includeBagInfo) {
         val bagInfoString = s"Department: ${department.get}\nSeries: ${series.get}"
