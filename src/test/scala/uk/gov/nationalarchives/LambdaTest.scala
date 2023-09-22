@@ -57,17 +57,15 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   val packageAvailable: TREInput = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
   val event: SQSEvent = createEvent(packageAvailable.asJson.printWith(Printer.noSpaces))
 
-  private def read[T](jsonString: String)(implicit enc: Decoder[T]): T = {
-    val d = decode[T](jsonString)
+  private def read[T](jsonString: String)(implicit enc: Decoder[T]): T =
     decode[T](jsonString).toOption.get
-  }
 
   private def runLambdaAndReturnStepFunctionRequest(metadataJsonOpt: Option[String] = None) = {
     stubAWSRequests(inputBucket, metadataJsonOpt = metadataJsonOpt)
     IngestParserTest().handleRequest(event, null)
 
     val sfnEvent = sfnServer.getAllServeEvents.asScala.head
-    decode[SFNRequest](sfnEvent.getRequest.getBodyAsString).toOption.get
+    read[SFNRequest](sfnEvent.getRequest.getBodyAsString)
   }
 
   case class IngestParserTest() extends Lambda {

@@ -69,7 +69,7 @@ class FileProcessor(
     val assetId = uuidGenerator()
     val folderMetadataObject = BagitMetadataObject(folderId, None, title, ArchiveFolder, Option(cite), None)
     val assetMetadataObject = BagitMetadataObject(assetId, Option(folderId), title, Asset)
-    val fileObject =
+    val fileRowMetadataObject =
       BagitMetadataObject(fileInfo.id, Option(assetId), title, File, Option(fileInfo.fileName), fileInfo.fileSize.some)
     val fileMetadataObject = BagitMetadataObject(
       metadataFileInfo.id,
@@ -79,7 +79,7 @@ class FileProcessor(
       metadataFileInfo.fileName.some,
       metadataFileInfo.fileSize.some
     )
-    val metadata = List(folderMetadataObject, assetMetadataObject, fileObject, fileMetadataObject)
+    val metadata = List(folderMetadataObject, assetMetadataObject, fileRowMetadataObject, fileMetadataObject)
     val bagitString = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
     for {
       metadataChecksum <- createAndUploadMetadata(metadata)
