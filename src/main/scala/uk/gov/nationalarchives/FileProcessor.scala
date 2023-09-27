@@ -225,7 +225,7 @@ object FileProcessor {
   case class AdditionalMetadata(key: String, value: String)
 
   case class BagitMetadataObject(
-      identifier: UUID,
+      id: UUID,
       parentId: Option[UUID],
       title: String,
       `type`: Type,
