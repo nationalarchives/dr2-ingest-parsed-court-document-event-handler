@@ -66,7 +66,7 @@ class FileProcessor(
       series: Option[String]
   ): IO[String] = {
     val fileTitle = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
-    val folderTitle = name.map(_.stripPrefix("Press Summary of ")).getOrElse(fileTitle)
+    val folderTitle = name.map(_.stripPrefix("Press Summary of ")).getOrElse("")
     val assetTitle = name.getOrElse(fileTitle)
     val folderId = uuidGenerator()
     val assetId = uuidGenerator()
