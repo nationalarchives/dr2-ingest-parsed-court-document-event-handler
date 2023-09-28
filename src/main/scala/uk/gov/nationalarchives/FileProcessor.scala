@@ -61,16 +61,26 @@ class FileProcessor(
       fileInfo: FileInfo,
       metadataFileInfo: FileInfo,
       cite: String,
+      judgmentName: Option[String],
       department: Option[String],
       series: Option[String]
   ): IO[String] = {
-    val title = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
+    val fileTitle = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
+    val folderTitle = judgmentName.map(_.stripPrefix("Press Summary of ")).getOrElse("")
+    val assetTitle = judgmentName.getOrElse(fileTitle)
     val folderId = uuidGenerator()
     val assetId = uuidGenerator()
-    val folderMetadataObject = BagitMetadataObject(folderId, None, title, ArchiveFolder, Option(cite), None)
-    val assetMetadataObject = BagitMetadataObject(assetId, Option(folderId), title, Asset)
+    val folderMetadataObject = BagitMetadataObject(folderId, None, folderTitle, ArchiveFolder, Option(cite), None)
+    val assetMetadataObject = BagitMetadataObject(assetId, Option(folderId), assetTitle, Asset)
     val fileRowMetadataObject =
-      BagitMetadataObject(fileInfo.id, Option(assetId), title, File, Option(fileInfo.fileName), fileInfo.fileSize.some)
+      BagitMetadataObject(
+        fileInfo.id,
+        Option(assetId),
+        fileTitle,
+        File,
+        Option(fileInfo.fileName),
+        fileInfo.fileSize.some
+      )
     val fileMetadataObject = BagitMetadataObject(
       metadataFileInfo.id,
       Option(assetId),
@@ -246,7 +256,7 @@ object FileProcessor {
       court: String,
       cite: Option[String] = None,
       date: LocalDate,
-      name: String,
+      name: Option[String],
       attachments: List[String] = Nil,
       `error-messages`: List[String] = Nil
   )

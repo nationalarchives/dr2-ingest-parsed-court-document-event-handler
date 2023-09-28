@@ -44,6 +44,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           fileInfo.copy(checksum = payload.sha256),
           metadataFileInfo,
           cite.getOrElse("Court Documents"),
+          treMetadata.parameters.PARSER.name,
           output.department,
           output.series
         )
