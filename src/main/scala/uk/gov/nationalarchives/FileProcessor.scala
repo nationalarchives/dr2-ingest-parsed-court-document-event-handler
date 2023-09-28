@@ -61,13 +61,13 @@ class FileProcessor(
       fileInfo: FileInfo,
       metadataFileInfo: FileInfo,
       cite: String,
-      name: Option[String],
+      judgmentName: Option[String],
       department: Option[String],
       series: Option[String]
   ): IO[String] = {
     val fileTitle = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
-    val folderTitle = name.map(_.stripPrefix("Press Summary of ")).getOrElse("")
-    val assetTitle = name.getOrElse(fileTitle)
+    val folderTitle = judgmentName.map(_.stripPrefix("Press Summary of ")).getOrElse("")
+    val assetTitle = judgmentName.getOrElse(fileTitle)
     val folderId = uuidGenerator()
     val assetId = uuidGenerator()
     val folderMetadataObject = BagitMetadataObject(folderId, None, folderTitle, ArchiveFolder, Option(cite), None)
