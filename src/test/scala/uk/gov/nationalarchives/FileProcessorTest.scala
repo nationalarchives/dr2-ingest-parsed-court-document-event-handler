@@ -225,22 +225,15 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
         val assetId = uuids.last
         val fileName = "fileName"
 
-        def bagitMetadataObject(
-            id: UUID,
-            `type`: Type,
-            name: Option[String] = None,
-            title: String,
-            parentId: Option[UUID] = None,
-            fileSize: Option[Long] = None
-        ) =
-          BagitMetadataObject(id, parentId, title, `type`, name, fileSize)
-        val folder = bagitMetadataObject(folderId, ArchiveFolder, Option("TEST-CITE"), expectedFolderTitle)
-        val asset = bagitMetadataObject(assetId, Asset, title = expectedAssetTitle, parentId = Option(folderId))
+        val folder =
+          BagitFolderAssetMetadataObject(folderId, None, expectedFolderTitle, ArchiveFolder, Option("TEST-CITE"))
+        val asset = BagitFolderAssetMetadataObject(assetId, Option(folderId), expectedAssetTitle, Asset)
         val files = List(
-          bagitMetadataObject(fileId, File, Option("fileName.txt"), fileName, Option(assetId), Option(1)),
-          bagitMetadataObject(metadataId, File, Option("metadataFileName.txt"), "", Option(assetId), Option(2))
+          BagitFileMetadataObject(fileId, Option(assetId), fileName, File, 1, Option("fileName.txt"), 1),
+          BagitFileMetadataObject(metadataId, Option(assetId), "", File, 2, Option("metadataFileName.txt"), 2)
         )
-        val metadataJsonString = (List(folder, asset) ++ files).asJson.printWith(Printer.noSpaces)
+        val metadataJsonList: List[BagitMetadataObject] = List(folder, asset) ++ files
+        val metadataJsonString = metadataJsonList.asJson.printWith(Printer.noSpaces)
 
         val bagitTxtContent =
           """BagIt-Version: 1.0

@@ -7,6 +7,7 @@ import fs2.compression.Compression
 import fs2.interop.reactivestreams._
 import fs2.io._
 import fs2.{Chunk, Pipe, Stream, text}
+import io.circe.Json.Null
 import io.circe.generic.auto._
 import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto.{deriveConfiguredDecoder, deriveConfiguredEncoder}
@@ -70,24 +71,26 @@ class FileProcessor(
     val assetTitle = judgmentName.getOrElse(fileTitle)
     val folderId = uuidGenerator()
     val assetId = uuidGenerator()
-    val folderMetadataObject = BagitMetadataObject(folderId, None, folderTitle, ArchiveFolder, Option(cite), None)
-    val assetMetadataObject = BagitMetadataObject(assetId, Option(folderId), assetTitle, Asset)
+    val folderMetadataObject = BagitFolderAssetMetadataObject(folderId, None, folderTitle, ArchiveFolder, Option(cite))
+    val assetMetadataObject = BagitFolderAssetMetadataObject(assetId, Option(folderId), assetTitle, Asset)
     val fileRowMetadataObject =
-      BagitMetadataObject(
+      BagitFileMetadataObject(
         fileInfo.id,
         Option(assetId),
         fileTitle,
         File,
+        1,
         Option(fileInfo.fileName),
-        fileInfo.fileSize.some
+        fileInfo.fileSize
       )
-    val fileMetadataObject = BagitMetadataObject(
+    val fileMetadataObject = BagitFileMetadataObject(
       metadataFileInfo.id,
       Option(assetId),
       "",
       File,
+      2,
       metadataFileInfo.fileName.some,
-      metadataFileInfo.fileSize.some
+      metadataFileInfo.fileSize
     )
     val metadata = List(folderMetadataObject, assetMetadataObject, fileRowMetadataObject, fileMetadataObject)
     val bagitString = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
@@ -215,7 +218,34 @@ object FileProcessor {
   private val chunkSize: Int = 1024 * 64
   implicit val customConfig: Configuration = Configuration.default.withDefaults
   implicit val parserDecoder: Decoder[Parser] = deriveConfiguredDecoder
-  implicit val bagitMetadataEncoder: Encoder[BagitMetadataObject] = deriveConfiguredEncoder
+  implicit val bagitMetadataEncoder: Encoder[BagitMetadataObject] = {
+    case BagitFolderAssetMetadataObject(id, parentId, title, objectType, name) =>
+      jsonFromMetadataObject(id, parentId, title, objectType, name)
+    case BagitFileMetadataObject(id, parentId, title, objectType, sortOrder, name, fileSize) =>
+      Json
+        .obj(
+          ("sortOrder", Json.fromInt(sortOrder)),
+          ("fileSize", Json.fromLong(fileSize))
+        )
+        .deepMerge(jsonFromMetadataObject(id, parentId, title, objectType, name))
+  }
+
+  private def jsonFromMetadataObject(
+      id: UUID,
+      parentId: Option[UUID],
+      title: String,
+      objectType: Type,
+      name: Option[String]
+  ) = {
+    Json.obj(
+      ("id", Json.fromString(id.toString)),
+      ("parentId", parentId.map(_.toString).map(Json.fromString).getOrElse(Null)),
+      ("title", Json.fromString(title)),
+      ("type", objectType.asJson),
+      ("name", name.map(Json.fromString).getOrElse(Null))
+    )
+  }
+
   implicit val additionalMetadataEncoder: Encoder[AdditionalMetadata] = deriveConfiguredEncoder
 
   implicit val typeEncoder: Encoder[Type] = {
@@ -233,15 +263,31 @@ object FileProcessor {
   case object File extends Type
 
   case class AdditionalMetadata(key: String, value: String)
+  sealed trait BagitMetadataObject {
+    def id: UUID
+    def parentId: Option[UUID]
+    def title: String
+    def `type`: Type
+    def name: Option[String]
+  }
 
-  case class BagitMetadataObject(
+  case class BagitFolderAssetMetadataObject(
       id: UUID,
       parentId: Option[UUID],
       title: String,
       `type`: Type,
+      name: Option[String] = None
+  ) extends BagitMetadataObject
+
+  case class BagitFileMetadataObject(
+      id: UUID,
+      parentId: Option[UUID],
+      title: String,
+      `type`: Type,
+      sortOrder: Int,
       name: Option[String] = None,
-      fileSize: Option[Long] = None
-  )
+      fileSize: Long
+  ) extends BagitMetadataObject
 
   case class FileInfo(id: UUID, fileSize: Long, fileName: String, checksum: String)
 
