@@ -226,11 +226,11 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
         val fileName = "fileName"
 
         val folder =
-          BagitFolderAssetMetadataObject(folderId, None, expectedFolderTitle, ArchiveFolder, Option("TEST-CITE"))
-        val asset = BagitFolderAssetMetadataObject(assetId, Option(folderId), expectedAssetTitle, Asset)
+          BagitFolderMetadataObject(folderId, None, expectedFolderTitle, Option("TEST-CITE"))
+        val asset = BagitAssetMetadataObject(assetId, Option(folderId), expectedAssetTitle)
         val files = List(
-          BagitFileMetadataObject(fileId, Option(assetId), fileName, File, 1, Option("fileName.txt"), 1),
-          BagitFileMetadataObject(metadataId, Option(assetId), "", File, 2, Option("metadataFileName.txt"), 2)
+          BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, "fileName.txt", 1),
+          BagitFileMetadataObject(metadataId, Option(assetId), "", 2, "metadataFileName.txt", 2)
         )
         val metadataJsonList: List[BagitMetadataObject] = List(folder, asset) ++ files
         val metadataJsonString = metadataJsonList.asJson.printWith(Printer.noSpaces)

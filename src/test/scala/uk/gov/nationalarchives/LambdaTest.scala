@@ -196,22 +196,21 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     val assetId = UUID.fromString("c2e7866e-5e94-4b4e-a49f-043ad937c18a")
     val fileId = UUID.fromString("c7e6b27f-5778-4da8-9b83-1b64bbccbd03")
     val metadataFileId = UUID.fromString("61ac0166-ccdf-48c4-800f-29e5fba2efda")
-    val expectedAssetMetadata = BagitFolderAssetMetadataObject(assetId, Option(folderId), "test", Asset)
+    val expectedAssetMetadata = BagitAssetMetadataObject(assetId, Option(folderId), "test")
     val expectedBagitTxt = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
     val expectedBagInfo = "Department: TEST\nSeries: TEST SERIES"
     val expectedFileMetadata = List(
-      BagitFileMetadataObject(fileId, Option(assetId), "Test", File, 1, Option("Test.docx"), 15684),
+      BagitFileMetadataObject(fileId, Option(assetId), "Test", 1, "Test.docx", 15684),
       BagitFileMetadataObject(
         metadataFileId,
         Option(assetId),
         "",
-        File,
         2,
-        Option("TRE-TEST-REFERENCE-metadata.json"),
+        "TRE-TEST-REFERENCE-metadata.json",
         215
       )
     )
-    val expectedFolderMetadata = BagitFolderAssetMetadataObject(folderId, None, "test", ArchiveFolder, Option("cite"))
+    val expectedFolderMetadata = BagitFolderMetadataObject(folderId, None, "test", Option("cite"))
     val metadataList: List[BagitMetadataObject] =
       List(expectedFolderMetadata, expectedAssetMetadata) ++ expectedFileMetadata
     val expectedMetadata = metadataList.asJson.printWith(Printer.noSpaces)
