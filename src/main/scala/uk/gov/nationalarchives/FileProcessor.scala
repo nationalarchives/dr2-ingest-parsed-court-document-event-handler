@@ -310,11 +310,13 @@ object FileProcessor {
       `error-messages`: List[String] = Nil
   )
 
-  case class Payload(filename: String, sha256: String)
+  case class Payload(filename: String)
 
   case class TREParams(payload: Payload)
 
-  case class TREMetadataParameters(PARSER: Parser, TRE: TREParams)
+  case class TDRParams(`Document-Checksum-sha256`: String)
+
+  case class TREMetadataParameters(PARSER: Parser, TRE: TREParams, TDR: TDRParams)
 
   case class Config(outputBucket: String, sfnArn: String)
 }

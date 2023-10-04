@@ -38,8 +38,10 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
       }
     }
 
-  val metadataJson =
-    s"""{"parameters":{"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}"""
+  val metadataJson: String =
+    s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde"},
+       |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},
+       |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
 
   private val uuids: List[UUID] = List(
     UUID.fromString("6e827e19-6a33-46c3-8730-b242c203d8c1"),

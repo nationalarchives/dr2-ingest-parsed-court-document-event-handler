@@ -41,7 +41,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         )
         output <- seriesMapper.createOutput(config.outputBucket, batchRef, cite)
         _ <- fileProcessor.createMetadataFiles(
-          fileInfo.copy(checksum = payload.sha256),
+          fileInfo.copy(checksum = treMetadata.parameters.TDR.`Document-Checksum-sha256`),
           metadataFileInfo,
           cite.getOrElse("Court Documents"),
           treMetadata.parameters.PARSER.name,

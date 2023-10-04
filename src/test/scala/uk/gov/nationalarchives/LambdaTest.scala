@@ -124,7 +124,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     )
 
     val metadataJson: String = metadataJsonOpt.getOrElse(
-      s"""{"parameters":{"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}"""
+      s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde"},
+         |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
+         |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
     )
 
     metadataFilesAndChecksums.foreach { case (file, checksum) =>
@@ -242,7 +244,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
 
   "the lambda" should "start the state machine execution with a null department and series if the cite is missing" in {
     val inputJson =
-      s"""{"parameters":{"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},"PARSER":{"uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}"""
+      s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde"},
+         |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},
+         |"PARSER":{"uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
 
     val sfnRequest = runLambdaAndReturnStepFunctionRequest(Option(inputJson))
     val input = read[Output](sfnRequest.input)
@@ -259,7 +263,10 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
 
   "the lambda" should "start the state machine execution with a null department and series if the cite is null" in {
     val inputJson =
-      s"""{"parameters":{"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},"PARSER":{"cite": null, "uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}"""
+      s"""{"parameters":{
+         |"TDR": {"Document-Checksum-sha256": "abcde"},
+         |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},
+         |"PARSER":{"cite": null, "uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
 
     val sfnRequest = runLambdaAndReturnStepFunctionRequest(Option(inputJson))
     val input = read[Output](sfnRequest.input)
