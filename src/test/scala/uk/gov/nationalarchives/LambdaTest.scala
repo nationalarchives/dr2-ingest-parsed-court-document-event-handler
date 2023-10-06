@@ -245,7 +245,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   "the lambda" should "start the state machine execution with a null department and series if the cite is missing" in {
     val inputJson =
       s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde"},
-         |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},
+         |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
          |"PARSER":{"uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
 
     val sfnRequest = runLambdaAndReturnStepFunctionRequest(Option(inputJson))
@@ -265,7 +265,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     val inputJson =
       s"""{"parameters":{
          |"TDR": {"Document-Checksum-sha256": "abcde"},
-         |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx","sha256":"abcde"}},
+         |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
          |"PARSER":{"cite": null, "uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
 
     val sfnRequest = runLambdaAndReturnStepFunctionRequest(Option(inputJson))
