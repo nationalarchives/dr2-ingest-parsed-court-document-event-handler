@@ -20,7 +20,6 @@ import uk.gov.nationalarchives.FileProcessor._
 
 import java.io.{BufferedInputStream, InputStream}
 import java.nio.ByteBuffer
-import java.time.LocalDate
 import java.util.{Base64, UUID}
 
 class FileProcessor(
@@ -301,10 +300,8 @@ object FileProcessor {
   case class TREMetadata(parameters: TREMetadataParameters)
 
   case class Parser(
-      uri: String,
-      court: String,
+      uri: Option[String],
       cite: Option[String] = None,
-      date: LocalDate,
       name: Option[String],
       attachments: List[String] = Nil,
       `error-messages`: List[String] = Nil

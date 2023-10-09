@@ -266,7 +266,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
       s"""{"parameters":{
          |"TDR": {"Document-Checksum-sha256": "abcde"},
          |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
-         |"PARSER":{"cite": null, "uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
+         |"PARSER":{"cite": null, "uri":"https://example.com","name":"test"}}}""".stripMargin
 
     val sfnRequest = runLambdaAndReturnStepFunctionRequest(Option(inputJson))
     val input = read[Output](sfnRequest.input)
@@ -276,6 +276,46 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
 
     input.series should equal(None)
     input.department should equal(None)
+    input.batchId should equal("TEST-REFERENCE")
+    input.s3Prefix should equal("TEST-REFERENCE/")
+    input.s3Bucket should equal(testOutputBucket)
+  }
+
+  "the lambda" should "start the state machine execution if the uri is null" in {
+    val inputJson =
+      s"""{"parameters":{
+         |"TDR": {"Document-Checksum-sha256": "abcde"},
+         |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
+         |"PARSER":{"cite": "cite", "uri":null,"name":"test"}}}""".stripMargin
+
+    val sfnRequest = runLambdaAndReturnStepFunctionRequest(Option(inputJson))
+    val input = read[Output](sfnRequest.input)
+
+    sfnRequest.stateMachineArn should equal("arn:aws:states:eu-west-2:123456789:stateMachine:StateMachineName")
+    sfnRequest.name should equal(s"TEST-REFERENCE-${uuidsAndChecksum(4)._1}")
+
+    input.series should equal(Some("TEST SERIES"))
+    input.department should equal(Some("TEST"))
+    input.batchId should equal("TEST-REFERENCE")
+    input.s3Prefix should equal("TEST-REFERENCE/")
+    input.s3Bucket should equal(testOutputBucket)
+  }
+
+  "the lambda" should "start the state machine execution if the uri is missing" in {
+    val inputJson =
+      s"""{"parameters":{
+         |"TDR": {"Document-Checksum-sha256": "abcde"},
+         |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
+         |"PARSER":{"cite": "cite","name":"test"}}}""".stripMargin
+
+    val sfnRequest = runLambdaAndReturnStepFunctionRequest(Option(inputJson))
+    val input = read[Output](sfnRequest.input)
+
+    sfnRequest.stateMachineArn should equal("arn:aws:states:eu-west-2:123456789:stateMachine:StateMachineName")
+    sfnRequest.name should equal(s"TEST-REFERENCE-${uuidsAndChecksum(4)._1}")
+
+    input.series should equal(Some("TEST SERIES"))
+    input.department should equal(Some("TEST"))
     input.batchId should equal("TEST-REFERENCE")
     input.s3Prefix should equal("TEST-REFERENCE/")
     input.s3Bucket should equal(testOutputBucket)
