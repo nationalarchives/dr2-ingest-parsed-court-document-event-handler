@@ -301,7 +301,7 @@ object FileProcessor {
   case class TREMetadata(parameters: TREMetadataParameters)
 
   case class Parser(
-      uri: String,
+      uri: Option[String],
       court: String,
       cite: Option[String] = None,
       date: LocalDate,
