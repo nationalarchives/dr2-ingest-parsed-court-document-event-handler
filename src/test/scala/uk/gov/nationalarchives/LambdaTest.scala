@@ -56,6 +56,10 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   val inputBucket = "inputBucket"
   val packageAvailable: TREInput = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
   val event: SQSEvent = createEvent(packageAvailable.asJson.printWith(Printer.noSpaces))
+  val deleteRequestXml: String =
+    """<?xml version="1.0" encoding="UTF-8"?><Delete xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+      |<Object><Key>c7e6b27f-5778-4da8-9b83-1b64bbccbd03</Key></Object>
+      |<Object><Key>61ac0166-ccdf-48c4-800f-29e5fba2efda</Key></Object></Delete>""".stripMargin.replaceAll("\\n", "")
 
   private def read[T](jsonString: String)(implicit enc: Decoder[T]): T =
     decode[T](jsonString).toOption.get
@@ -148,6 +152,12 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
       s3Server.stubFor(
         get(urlEqualTo(s"/$testOutputBucket/$uuid"))
           .willReturn(okJson(metadataJson))
+      )
+
+      s3Server.stubFor(
+        post(urlEqualTo(s"/$testOutputBucket?delete"))
+          .withRequestBody(equalToXml(deleteRequestXml))
+          .willReturn(ok())
       )
       s3Server.stubFor(
         head(urlEqualTo(s"/$testOutputBucket/$uuid"))
@@ -319,6 +329,17 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     input.batchId should equal("TEST-REFERENCE")
     input.s3Prefix should equal("TEST-REFERENCE/")
     input.s3Bucket should equal(testOutputBucket)
+  }
+
+  "the lambda" should "delete the extracted files from the bucket root" in {
+    stubAWSRequests(inputBucket)
+    IngestParserTest().handleRequest(event, null)
+    val serveEvents = s3Server.getAllServeEvents.asScala
+    val deleteObjectsEvents = serveEvents.filter(e =>
+      e.getRequest.getUrl == s"/$testOutputBucket?delete" && e.getRequest.getMethod == RequestMethod.POST
+    )
+    deleteObjectsEvents.size should equal(1)
+    deleteObjectsEvents.head.getRequest.getBodyAsString should equal(deleteRequestXml)
   }
 
   "the lambda" should "error if the input json is invalid" in {
