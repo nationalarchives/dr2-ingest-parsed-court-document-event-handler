@@ -10,7 +10,7 @@ import org.mockito.{ArgumentMatcher, ArgumentMatchers, MockitoSugar}
 import org.reactivestreams.Publisher
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
-import org.scalatest.prop.{TableDrivenPropertyChecks, TableFor3}
+import org.scalatest.prop.{TableDrivenPropertyChecks, TableFor3, TableFor6}
 import reactor.core.publisher.Flux
 import software.amazon.awssdk.services.s3.model.PutObjectResponse
 import software.amazon.awssdk.transfer.s3.model.CompletedUpload
@@ -202,12 +202,16 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     ex.getMessage should equal("Error downloading metadata file")
   }
 
-  val departmentAndSeriesTable: TableFor3[Option[String], Option[String], Boolean] = Table(
-    ("department", "series", "includeBagInfo"),
-    (Option("Department"), Option("Series"), true),
-    (Option("Department"), None, false),
-    (None, Option("Series"), false),
-    (None, None, false)
+  val citeDepartmentAndSeriesTable: TableFor6[Option[String], Option[String], Boolean, Option[String], String, Boolean] = Table(
+    ("department", "series", "includeBagInfo", "cite", "expectedFolderName", "titleExpected"),
+    (Option("Department"), Option("Series"), true, Option("TEST-CITE"), "TEST-CITE", true),
+    (Option("Department"), None, false, Option("TEST-CITE"), "Court Documents (court not matched)", false),
+    (None, Option("Series"), false, Option("TEST-CITE"), "Court Documents (court not matched)", false),
+    (None, None, false, Option("TEST-CITE"), "Court Documents (court not matched)", false),
+    (Option("Department"), Option("Series"), true, None, "Court Documents (court unknown)", false),
+    (Option("Department"), None, false, None, "Court Documents (court unknown)", false),
+    (None, Option("Series"), false, None, "Court Documents (court unknown)", false),
+    (None, None, false, None, "Court Documents (court unknown)", false)
   )
 
   val treNameTable: TableFor3[Option[String], String, String] = Table(
@@ -218,17 +222,17 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
   )
 
   forAll(treNameTable) { (treName, expectedFolderTitle, expectedAssetTitle) =>
-    forAll(departmentAndSeriesTable) { (department, series, includeBagInfo) =>
-      "createMetadataFiles" should s"upload the correct bagit files for $department, $series and TRE name $treName" in {
+    forAll(citeDepartmentAndSeriesTable) { (department, series, includeBagInfo, cite, expectedFolderName, titleExpected) =>
+      "createMetadataFiles" should s"upload the correct bagit files for $department, $series, $cite and TRE name $treName" in {
         val fileId = UUID.randomUUID()
         val metadataId = UUID.randomUUID()
         val s3 = mock[DAS3Client[IO]]
         val folderId = uuids.head
         val assetId = uuids.last
         val fileName = "fileName"
-
+        val folderTitle = if (titleExpected) Option(expectedFolderTitle) else None
         val folder =
-          BagitFolderMetadataObject(folderId, None, expectedFolderTitle, Option("TEST-CITE"))
+          BagitFolderMetadataObject(folderId, None, folderTitle, expectedFolderName)
         val asset = BagitAssetMetadataObject(assetId, Option(folderId), expectedAssetTitle)
         val files = List(
           BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, "fileName.txt", 1),
@@ -303,7 +307,6 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
         val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
         val fileInfo = FileInfo(fileId, 1, "fileName.txt", "fileChecksum")
         val metadataFileInfo = FileInfo(metadataId, 2, "metadataFileName.txt", "metadataChecksum")
-        val cite = "TEST-CITE"
         val tagManifestChecksumResult =
           fileProcessor
             .createMetadataFiles(fileInfo, metadataFileInfo, cite, treName, department, series)
@@ -331,7 +334,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
         .createMetadataFiles(
           fileInfo,
           metadataFileInfo,
-          cite,
+          Option(cite),
           Option("Test title"),
           Option("department"),
           Option("series")

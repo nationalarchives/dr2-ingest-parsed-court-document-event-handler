@@ -222,7 +222,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
         215
       )
     )
-    val expectedFolderMetadata = BagitFolderMetadataObject(folderId, None, "test", Option("cite"))
+    val expectedFolderMetadata = BagitFolderMetadataObject(folderId, None, Option("test"), "cite")
     val metadataList: List[BagitMetadataObject] =
       List(expectedFolderMetadata, expectedAssetMetadata) ++ expectedFileMetadata
     val expectedMetadata = metadataList.asJson.printWith(Printer.noSpaces)
@@ -335,9 +335,8 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     stubAWSRequests(inputBucket)
     IngestParserTest().handleRequest(event, null)
     val serveEvents = s3Server.getAllServeEvents.asScala
-    val deleteObjectsEvents = serveEvents.filter(e =>
-      e.getRequest.getUrl == s"/$testOutputBucket?delete" && e.getRequest.getMethod == RequestMethod.POST
-    )
+    val deleteObjectsEvents =
+      serveEvents.filter(e => e.getRequest.getUrl == s"/$testOutputBucket?delete" && e.getRequest.getMethod == RequestMethod.POST)
     deleteObjectsEvents.size should equal(1)
     deleteObjectsEvents.head.getRequest.getBodyAsString should equal(deleteRequestXml)
   }
