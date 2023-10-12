@@ -56,7 +56,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
   val inputBucket = "inputBucket"
   val packageAvailable: TREInput = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
   val event: SQSEvent = createEvent(packageAvailable.asJson.printWith(Printer.noSpaces))
-  val deleteRequestXml: String =
+  val expectedDeleteRequestXml: String =
     """<?xml version="1.0" encoding="UTF-8"?><Delete xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
       |<Object><Key>c7e6b27f-5778-4da8-9b83-1b64bbccbd03</Key></Object>
       |<Object><Key>61ac0166-ccdf-48c4-800f-29e5fba2efda</Key></Object></Delete>""".stripMargin.replaceAll("\\n", "")
@@ -156,7 +156,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
 
       s3Server.stubFor(
         post(urlEqualTo(s"/$testOutputBucket?delete"))
-          .withRequestBody(equalToXml(deleteRequestXml))
+          .withRequestBody(equalToXml(expectedDeleteRequestXml))
           .willReturn(ok())
       )
       s3Server.stubFor(
@@ -331,7 +331,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
     input.s3Bucket should equal(testOutputBucket)
   }
 
-  "the lambda" should "delete the extracted files from the bucket root" in {
+  "the lambda" should "send a request to delete the extracted files from the bucket root" in {
     stubAWSRequests(inputBucket)
     IngestParserTest().handleRequest(event, null)
     val serveEvents = s3Server.getAllServeEvents.asScala
@@ -339,7 +339,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach {
       e.getRequest.getUrl == s"/$testOutputBucket?delete" && e.getRequest.getMethod == RequestMethod.POST
     )
     deleteObjectsEvents.size should equal(1)
-    deleteObjectsEvents.head.getRequest.getBodyAsString should equal(deleteRequestXml)
+    deleteObjectsEvents.head.getRequest.getBodyAsString should equal(expectedDeleteRequestXml)
   }
 
   "the lambda" should "error if the input json is invalid" in {
