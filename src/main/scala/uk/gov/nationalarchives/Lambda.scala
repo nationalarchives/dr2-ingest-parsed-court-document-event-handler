@@ -51,7 +51,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         _ <- s3.copy(outputBucket, fileInfo.id.toString, outputBucket, s"$batchRef/data/${fileInfo.id}")
         _ <- s3
           .copy(outputBucket, metadataFileInfo.id.toString, outputBucket, s"$batchRef/data/${metadataFileInfo.id}")
-
+        _ <- s3.deleteObjects(outputBucket, fileNameToFileInfo.values.map(_.id.toString).toList)
         _ <- sfn.startExecution(config.sfnArn, output, Option(s"$batchRef-${randomUuidGenerator()}"))
       } yield ()
     }.sequence

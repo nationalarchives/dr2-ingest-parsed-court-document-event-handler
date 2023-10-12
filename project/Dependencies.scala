@@ -2,7 +2,7 @@ import sbt._
 object Dependencies {
   lazy val logbackVersion = "2.20.0"
   lazy val pureConfigVersion = "0.17.4"
-  lazy val daAwsClientsVersion = "0.1.22"
+  lazy val daAwsClientsVersion = "0.1.26"
   private val circeVersion = "0.14.5"
   lazy val circeCore = "io.circe" %% "circe-core" % circeVersion
   lazy val circeGeneric = "io.circe" %% "circe-generic" % circeVersion
