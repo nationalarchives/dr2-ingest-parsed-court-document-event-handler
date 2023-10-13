@@ -7,7 +7,7 @@ class SeriesMapper(courts: Set[Court]) {
   def createOutput(uploadBucket: String, batchId: String, potentialCite: Option[String]): IO[Output] = {
     potentialCite
       .map { cite =>
-        val filteredSeries = courts.filter(court => cite.contains(court.code))
+        val filteredSeries = courts.filter(court => cite.toUpperCase.contains(court.code))
         filteredSeries.size match {
           case size if size > 1 =>
             IO.raiseError(

@@ -34,15 +34,18 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           new RuntimeException(s"Cannot find metadata for $batchRef")
         )
         treMetadata <- fileProcessor.readJsonFromPackage(metadataFileInfo.id)
+        parsedUri <- fileProcessor.parseUri(treMetadata.parameters.PARSER.uri)
         payload = treMetadata.parameters.TRE.payload
         cite = treMetadata.parameters.PARSER.cite
+
         fileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$batchRef/${payload.filename}"))(
           new RuntimeException(s"Document not found for file belonging to $batchRef")
         )
-        output <- seriesMapper.createOutput(config.outputBucket, batchRef, cite)
+        output <- seriesMapper.createOutput(config.outputBucket, batchRef, parsedUri.flatMap(_.cite))
         _ <- fileProcessor.createMetadataFiles(
           fileInfo.copy(checksum = treMetadata.parameters.TDR.`Document-Checksum-sha256`),
           metadataFileInfo,
+          parsedUri,
           cite,
           treMetadata.parameters.PARSER.name,
           output.department,

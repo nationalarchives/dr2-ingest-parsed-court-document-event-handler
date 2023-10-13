@@ -57,28 +57,48 @@ class FileProcessor(
     } yield parsedJson
   }
 
+  def parseUri(potentialUri: Option[String]): IO[Option[ParsedUri]] = {
+    potentialUri.map { uri =>
+      val citeRegex = "^.*/id/([a-z]*)/".r
+      val uriWithoutDocTypeRegex = "(^.*/\\d{4}/\\d*)".r
+      val potentialCite = citeRegex.findFirstMatchIn(uri).map(_.group(1))
+      val potentialUriWithoutDocType = uriWithoutDocTypeRegex.findFirstMatchIn(uri).map(_.group(1))
+      IO.fromOption(potentialUriWithoutDocType)(
+        new RuntimeException(s"Failure trying to trim the doc type for $uri. Is the year missing?")
+      ).map { uriWithoutDocType =>
+        ParsedUri(potentialCite, uriWithoutDocType)
+      }
+    }.sequence
+  }
+
   def createMetadataFiles(
       fileInfo: FileInfo,
       metadataFileInfo: FileInfo,
+      parsedUri: Option[ParsedUri],
       potentialCite: Option[String],
       judgmentName: Option[String],
       department: Option[String],
       series: Option[String]
   ): IO[String] = {
-
-    val (cite, folderTitle) = if (department.flatMap(_ => series).isEmpty && potentialCite.isDefined) {
+    val potentialCiteFromUri = parsedUri.flatMap(_.cite)
+    val (folderName, folderTitle) = if (department.flatMap(_ => series).isEmpty && potentialCiteFromUri.isDefined) {
       ("Court Documents (court not matched)", None)
-    } else if (potentialCite.isEmpty) {
+    } else if (potentialCiteFromUri.isEmpty) {
       ("Court Documents (court unknown)", None)
     } else {
-      (potentialCite.get, Option(judgmentName.map(_.stripPrefix("Press Summary of ")).getOrElse("")))
+      (parsedUri.get.uriWithoutDocType, Option(judgmentName.map(_.stripPrefix("Press Summary of ")).getOrElse("")))
     }
 
+    val idFields = potentialCite
+      .map { cite =>
+        List(IdField("Code", cite), IdField("Cite", cite))
+      }
+      .getOrElse(Nil)
     val fileTitle = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
     val assetTitle = judgmentName.getOrElse(fileTitle)
     val folderId = uuidGenerator()
     val assetId = uuidGenerator()
-    val folderMetadataObject = BagitFolderMetadataObject(folderId, None, folderTitle, cite)
+    val folderMetadataObject = BagitFolderMetadataObject(folderId, None, folderTitle, folderName, idFields)
     val assetMetadataObject = BagitAssetMetadataObject(assetId, Option(folderId), assetTitle)
     val fileRowMetadataObject =
       BagitFileMetadataObject(
@@ -224,8 +244,14 @@ object FileProcessor {
   implicit val customConfig: Configuration = Configuration.default.withDefaults
   implicit val parserDecoder: Decoder[Parser] = deriveConfiguredDecoder
   implicit val bagitMetadataEncoder: Encoder[BagitMetadataObject] = {
-    case BagitFolderMetadataObject(id, parentId, title, name) =>
-      jsonFromMetadataObject(id, parentId, title, ArchiveFolder, Option(name))
+    case BagitFolderMetadataObject(id, parentId, title, name, idFields) =>
+      jsonFromMetadataObject(id, parentId, title, ArchiveFolder, Option(name)).deepMerge {
+        Json.fromFields(
+          idFields.map { idField =>
+            (s"id_${idField.name}", Json.fromString(idField.value))
+          }
+        )
+      }
     case BagitAssetMetadataObject(id, parentId, title, name) =>
       jsonFromMetadataObject(id, parentId, Option(title), Asset, name)
     case BagitFileMetadataObject(id, parentId, title, sortOrder, name, fileSize) =>
@@ -275,11 +301,14 @@ object FileProcessor {
     def parentId: Option[UUID]
   }
 
+  case class IdField(name: String, value: String)
+
   case class BagitFolderMetadataObject(
       id: UUID,
       parentId: Option[UUID],
       title: Option[String],
-      name: String
+      name: String,
+      idFields: List[IdField] = Nil
   ) extends BagitMetadataObject
 
   case class BagitAssetMetadataObject(
@@ -297,6 +326,8 @@ object FileProcessor {
       name: String,
       fileSize: Long
   ) extends BagitMetadataObject
+
+  case class ParsedUri(cite: Option[String], uriWithoutDocType: String)
 
   case class FileInfo(id: UUID, fileSize: Long, fileName: String, checksum: String)
 
