@@ -88,7 +88,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
 
     override val s3: DAS3Client[IO] = DAS3Client[IO](s3AsyncClient)
     override val sfn: DASFNClient[IO] = new DASFNClient(sfnAsyncClient)
-    override val seriesMapper: SeriesMapper = new SeriesMapper(Set(Court("cite", "TEST", "TEST SERIES")))
+    override val seriesMapper: SeriesMapper = new SeriesMapper(Set(Court("CITE", "TEST", "TEST SERIES")))
     val uuidsIterator: Iterator[String] = uuidsAndChecksum.map(_._1).iterator
 
     override val randomUuidGenerator: () => UUID = () => UUID.fromString(uuidsIterator.next())
