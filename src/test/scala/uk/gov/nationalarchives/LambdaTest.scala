@@ -195,17 +195,17 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
   }
 
   val citeTable: TableFor2[Option[String], List[IdField]] = Table(
-    ("cite", "idFields"),
+    ("potentialCite", "idFields"),
     (None, Nil),
     (Option("\"cite\""), List(IdField("Code", "cite"), IdField("Cite", "cite")))
   )
 
-  forAll(citeTable) { (cite, idFields) =>
-    "the lambda" should s"write the correct metadata files to S3 with a cite ${cite.orNull}" in {
+  forAll(citeTable) { (potentialCite, idFields) =>
+    "the lambda" should s"write the correct metadata files to S3 with a cite ${potentialCite.orNull}" in {
       val metadataJson: String =
         s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde"},
            |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
-           |"PARSER":{"cite":${cite.orNull},"uri":"https://example.com/id/cite/2023/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
+           |"PARSER":{"cite":${potentialCite.orNull},"uri":"https://example.com/id/cite/2023/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
       stubAWSRequests(inputBucket, metadataJsonOpt = Option(metadataJson))
       IngestParserTest().handleRequest(event, null)
       val serveEvents = s3Server.getAllServeEvents.asScala
@@ -270,13 +270,13 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
   val citeAndUri: TableFor4[Option[String], Option[String], Option[String], Option[String]] = Table(
     ("cite", "uri", "expectedSeries", "expectedDepartment"),
     (None, None, None, None),
-    (None, Option("\"https://example.com/id/cite/2023/\""), Option("TEST SERIES"), Option("TEST")),
-    (Option("\"cite\""), None, None, None),
-    (Option("\"cite\""), Option("\"https://example.com/id/cite/2023/\""), Option("TEST SERIES"), Option("TEST"))
+    (None, Option(""""https://example.com/id/cite/2023/""""), Option("TEST SERIES"), Option("TEST")),
+    (Option(""""cite""""), None, None, None),
+    (Option(""""cite""""), Option(""""https://example.com/id/cite/2023/""""), Option("TEST SERIES"), Option("TEST"))
   )
 
   forAll(citeAndUri) { (cite, uri, expectedSeries, expectedDepartment) =>
-    "the lambda" should s"start the state machine execution with a series ${expectedSeries.orNull} and department ${expectedDepartment.orNull} if the uri is ${uri.orNull} and the cite is ${cite.orNull}" in {
+    "the lambda" should s"start the state machine execution with a ${expectedSeries.orNull} series and ${expectedDepartment.orNull} department if the uri is ${uri.orNull} and the cite is ${cite.orNull}" in {
       val inputJson =
         s"""{"parameters":{
            |"TDR": {"Document-Checksum-sha256": "abcde"},

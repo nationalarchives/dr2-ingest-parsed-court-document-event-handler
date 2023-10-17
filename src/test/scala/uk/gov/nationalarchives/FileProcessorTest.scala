@@ -210,7 +210,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
   val unknown = "Court Documents (court unknown)"
 
   val citeTable: TableFor2[Option[String], List[IdField]] = Table(
-    ("cite", "idFields"),
+    ("potentialCite", "idFields"),
     (None, Nil),
     (Option("cite"), List(IdField("Code", "cite"), IdField("Cite", "cite")))
   )
@@ -238,7 +238,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     (Option("Press Summary of test"), "test", "Press Summary of test")
   )
 
-  forAll(citeTable) { (cite, idFields) =>
+  forAll(citeTable) { (potentialCite, idFields) =>
     {
       forAll(treNameTable) { (treName, expectedFolderTitle, expectedAssetTitle) =>
         forAll(urlDepartmentAndSeriesTable) {
@@ -331,7 +331,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
                 val tagManifestChecksumResult =
                   fileProcessor
-                    .createMetadataFiles(fileInfo, metadataFileInfo, parsedUri, cite, treName, department, series)
+                    .createMetadataFiles(fileInfo, metadataFileInfo, parsedUri, potentialCite, treName, department, series)
                     .unsafeRunSync()
 
                 tagManifestChecksumResult should equal(tagManifestChecksum)
@@ -370,7 +370,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
   }
 
   val uriTable: TableFor2[Option[String], Option[ParsedUri]] = Table(
-    ("uri", "expectedResult"),
+    ("uri", "expectedCiteAndUri"),
     (Option("http://example.com/id/abcd/2023/1"), Option(ParsedUri(Option("abcd"), "http://example.com/id/abcd/2023/1"))),
     (
       Option("http://example.com/id/abcd/efgh/2024/123"),
@@ -384,22 +384,25 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
       Option("http://example.com/id/mnop/qrst/2026/567/different-doc-type/8"),
       Option(ParsedUri(Option("mnop"), "http://example.com/id/mnop/qrst/2026/567"))
     ),
+    (Option("http://example.com/id/abcd/efgh/2024/"), Option(ParsedUri(Option("abcd"), "http://example.com/id/abcd/efgh/2024/"))),
     (None, None)
   )
 
-  forAll(uriTable) { (uri, expectedResult) =>
-    "parseUrl" should s"parse the uri $uri" in {
+  forAll(uriTable) { (uri, expectedCiteAndUri) =>
+    "parseUri" should s"parse the uri $uri and return the cite and uri without doc type" in {
       val fileProcessor = new FileProcessor("download", "upload", "ref", mock[DAS3Client[IO]], UUIDGenerator().uuidGenerator)
-      fileProcessor.parseUri(uri).unsafeRunSync() should equal(expectedResult)
+      fileProcessor.parseUri(uri).unsafeRunSync() should equal(expectedCiteAndUri)
     }
   }
 
-  "parseUrl" should "return an error if the trimmed url cannot be parsed because of a missing year" in {
+  "parseUri" should "return an error if the url cannot be trimmed because of a missing year" in {
     val fileProcessor = new FileProcessor("download", "upload", "ref", mock[DAS3Client[IO]], UUIDGenerator().uuidGenerator)
     val ex = intercept[RuntimeException] {
       fileProcessor.parseUri(Option("http://example.com/id/mnop/qrst")).unsafeRunSync()
     }
-    ex.getMessage should equal("Failure trying to trim the doc type for http://example.com/id/mnop/qrst. Is the year missing?")
+    ex.getMessage should equal(
+      "Failure trying to trim off the doc type for http://example.com/id/mnop/qrst. Is the year missing?"
+    )
   }
 
 }
