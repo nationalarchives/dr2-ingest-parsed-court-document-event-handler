@@ -60,17 +60,25 @@ class FileProcessor(
   def createMetadataFiles(
       fileInfo: FileInfo,
       metadataFileInfo: FileInfo,
-      cite: String,
+      potentialCite: Option[String],
       judgmentName: Option[String],
       department: Option[String],
       series: Option[String]
   ): IO[String] = {
+
+    val (cite, folderTitle) = if (department.flatMap(_ => series).isEmpty && potentialCite.isDefined) {
+      ("Court Documents (court not matched)", None)
+    } else if (potentialCite.isEmpty) {
+      ("Court Documents (court unknown)", None)
+    } else {
+      (potentialCite.get, Option(judgmentName.map(_.stripPrefix("Press Summary of ")).getOrElse("")))
+    }
+
     val fileTitle = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
-    val folderTitle = judgmentName.map(_.stripPrefix("Press Summary of ")).getOrElse("")
     val assetTitle = judgmentName.getOrElse(fileTitle)
     val folderId = uuidGenerator()
     val assetId = uuidGenerator()
-    val folderMetadataObject = BagitFolderMetadataObject(folderId, None, folderTitle, Option(cite))
+    val folderMetadataObject = BagitFolderMetadataObject(folderId, None, folderTitle, cite)
     val assetMetadataObject = BagitAssetMetadataObject(assetId, Option(folderId), assetTitle)
     val fileRowMetadataObject =
       BagitFileMetadataObject(
@@ -217,29 +225,29 @@ object FileProcessor {
   implicit val parserDecoder: Decoder[Parser] = deriveConfiguredDecoder
   implicit val bagitMetadataEncoder: Encoder[BagitMetadataObject] = {
     case BagitFolderMetadataObject(id, parentId, title, name) =>
-      jsonFromMetadataObject(id, parentId, title, ArchiveFolder, name)
+      jsonFromMetadataObject(id, parentId, title, ArchiveFolder, Option(name))
     case BagitAssetMetadataObject(id, parentId, title, name) =>
-      jsonFromMetadataObject(id, parentId, title, Asset, name)
+      jsonFromMetadataObject(id, parentId, Option(title), Asset, name)
     case BagitFileMetadataObject(id, parentId, title, sortOrder, name, fileSize) =>
       Json
         .obj(
           ("sortOrder", Json.fromInt(sortOrder)),
           ("fileSize", Json.fromLong(fileSize))
         )
-        .deepMerge(jsonFromMetadataObject(id, parentId, title, File, Option(name)))
+        .deepMerge(jsonFromMetadataObject(id, parentId, Option(title), File, Option(name)))
   }
 
   private def jsonFromMetadataObject(
       id: UUID,
       parentId: Option[UUID],
-      title: String,
+      title: Option[String],
       objectType: Type,
       name: Option[String]
   ) = {
     Json.obj(
       ("id", Json.fromString(id.toString)),
       ("parentId", parentId.map(_.toString).map(Json.fromString).getOrElse(Null)),
-      ("title", Json.fromString(title)),
+      ("title", title.map(Json.fromString).getOrElse(Null)),
       ("type", objectType.asJson),
       ("name", name.map(Json.fromString).getOrElse(Null))
     )
@@ -265,14 +273,13 @@ object FileProcessor {
   sealed trait BagitMetadataObject {
     def id: UUID
     def parentId: Option[UUID]
-    def title: String
   }
 
   case class BagitFolderMetadataObject(
       id: UUID,
       parentId: Option[UUID],
-      title: String,
-      name: Option[String] = None
+      title: Option[String],
+      name: String
   ) extends BagitMetadataObject
 
   case class BagitAssetMetadataObject(

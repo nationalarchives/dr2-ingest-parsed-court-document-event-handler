@@ -45,13 +45,12 @@ class SeriesMapperTest extends AnyFlatSpec with MockitoSugar with TableDrivenPro
     ex.getMessage should equal(expectedMessage)
   }
 
-  "createOutput" should "return an error if no series are found" in {
+  "createOutput" should "return an empty series if no series are found" in {
     val seriesMapper = SeriesMapper()
-    val ex = intercept[RuntimeException] {
-      seriesMapper.createOutput("upload", "batch", Option(s"2023 PREFIX SUFFIX")).unsafeRunSync()
-    }
-    val expectedMessage = s"0 entries found when looking up series for cite 2023 PREFIX SUFFIX and batchId batch"
-    ex.getMessage should equal(expectedMessage)
+    val output = seriesMapper.createOutput("upload", "batch", Option(s"2023 PREFIX SUFFIX")).unsafeRunSync()
+
+    output.series.isEmpty should equal(true)
+    output.department.isEmpty should equal(true)
   }
 
   "createOutput" should "return an empty department and series if the cite is missing" in {

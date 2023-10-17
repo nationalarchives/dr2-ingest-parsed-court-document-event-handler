@@ -9,15 +9,15 @@ class SeriesMapper(courts: Set[Court]) {
       .map { cite =>
         val filteredSeries = courts.filter(court => cite.contains(court.code))
         filteredSeries.size match {
-          case 1 =>
-            IO {
-              val court = filteredSeries.head
-              Output(batchId, uploadBucket, s"$batchId/", Option(court.dept), Option(court.series))
-            }
-          case size: Int =>
+          case size if size > 1 =>
             IO.raiseError(
               new RuntimeException(s"$size entries found when looking up series for cite $cite and batchId $batchId")
             )
+          case _ =>
+            IO {
+              val court = filteredSeries.headOption
+              Output(batchId, uploadBucket, s"$batchId/", court.map(_.dept), court.map(_.series))
+            }
         }
       }
       .getOrElse(IO(Output(batchId, uploadBucket, s"$batchId/", None, None)))
