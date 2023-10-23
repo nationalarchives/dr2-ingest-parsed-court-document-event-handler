@@ -220,7 +220,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
       val assetId = UUID.fromString("c2e7866e-5e94-4b4e-a49f-043ad937c18a")
       val fileId = UUID.fromString("c7e6b27f-5778-4da8-9b83-1b64bbccbd03")
       val metadataFileId = UUID.fromString("61ac0166-ccdf-48c4-800f-29e5fba2efda")
-      val expectedAssetMetadata = BagitAssetMetadataObject(assetId, Option(folderId), "test")
+      val expectedAssetMetadata = BagitAssetMetadataObject(assetId, Option(folderId), "Test.docx", "Test.docx")
       val expectedBagitTxt = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
       val expectedBagInfo = "Department: TEST\nSeries: TEST SERIES"
       val expectedFileMetadata = List(
