@@ -10,7 +10,7 @@ import org.mockito.{ArgumentMatcher, ArgumentMatchers, MockitoSugar}
 import org.reactivestreams.Publisher
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
-import org.scalatest.prop.{TableDrivenPropertyChecks, TableFor2, TableFor3, TableFor6}
+import org.scalatest.prop.{TableDrivenPropertyChecks, TableFor2, TableFor4, TableFor6}
 import reactor.core.publisher.Flux
 import software.amazon.awssdk.services.s3.model.PutObjectResponse
 import software.amazon.awssdk.transfer.s3.model.CompletedUpload
@@ -231,16 +231,16 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     (None, None, false, None, unknown, false)
   )
 
-  val treNameTable: TableFor3[Option[String], String, String] = Table(
-    ("treName", "expectedFolderTitle", "expectedAssetTitle"),
-    (Option("Test title"), "Test title", "Test title"),
-    (None, "", "fileName"),
-    (Option("Press Summary of test"), "test", "Press Summary of test")
+  val treNameTable: TableFor4[Option[String], String, String, String] = Table(
+    ("treName", "treFileName", "expectedFolderTitle", "expectedAssetTitle"),
+    (Option("Test title"), "fileName.txt", "Test title", "fileName.txt"),
+    (None, "fileName.txt", "", "fileName.txt"),
+    (Option("Press Summary of test"), "Press Summary of test.txt", "test", "Press Summary of test.txt")
   )
 
   forAll(citeTable) { (potentialCite, idFields) =>
     {
-      forAll(treNameTable) { (treName, expectedFolderTitle, expectedAssetTitle) =>
+      forAll(treNameTable) { (treName, treFileName, expectedFolderTitle, expectedAssetTitle) =>
         forAll(urlDepartmentAndSeriesTable) {
           (department, series, includeBagInfo, parsedUri, expectedFolderName, titleExpected) =>
             "createMetadataFiles" should s"upload the correct bagit files with $expectedFolderTitle, $expectedAssetTitle and $idFields" +
@@ -250,13 +250,13 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
                 val s3 = mock[DAS3Client[IO]]
                 val folderId = uuids.head
                 val assetId = uuids.last
-                val fileName = "fileName"
+                val fileName = treFileName.split("\\.").dropRight(1).mkString(".")
                 val folderTitle = if (titleExpected) Option(expectedFolderTitle) else None
                 val folder =
                   BagitFolderMetadataObject(folderId, None, folderTitle, expectedFolderName, idFields)
-                val asset = BagitAssetMetadataObject(assetId, Option(folderId), expectedAssetTitle)
+                val asset = BagitAssetMetadataObject(assetId, Option(folderId), expectedAssetTitle, expectedAssetTitle)
                 val files = List(
-                  BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, "fileName.txt", 1),
+                  BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, treFileName, 1),
                   BagitFileMetadataObject(metadataId, Option(assetId), "", 2, "metadataFileName.txt", 2)
                 )
                 val metadataJsonList: List[BagitMetadataObject] = List(folder, asset) ++ files
@@ -326,7 +326,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
                 mockUpload("tagmanifest-sha256.txt", tagManifestString, tagManifestChecksum)
 
                 val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
-                val fileInfo = FileInfo(fileId, 1, "fileName.txt", "fileChecksum")
+                val fileInfo = FileInfo(fileId, 1, treFileName, "fileChecksum")
                 val metadataFileInfo = FileInfo(metadataId, 2, "metadataFileName.txt", "metadataChecksum")
 
                 val tagManifestChecksumResult =
