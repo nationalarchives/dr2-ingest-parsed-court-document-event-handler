@@ -162,19 +162,20 @@ class FileProcessor(
           .flatMap { stream =>
             if (!tarEntry.isDirectory) {
               val id = uuidGenerator()
-              Stream.eval[IO, (String, FileInfo)](
-                stream.chunks
-                  .map(_.toByteBuffer)
-                  .toUnicastPublisher
-                  .use(s3.upload(uploadBucket, id.toString, tarEntry.getSize, _))
-                  .map { res =>
-                    val checksum = checksumToString(res.response().checksumSHA256())
-                    tarEntry.getName -> FileInfo(id, tarEntry.getSize, tarEntry.getName.split("/").last, checksum)
-                  }
-              )
-            } else {
-              Stream.empty
-            }
+              if (tarEntry.getSize <= 0) Stream.raiseError[IO](new Exception(s"The size of a file in this tar file is 0"))
+              else {
+                Stream.eval[IO, (String, FileInfo)](
+                  stream.chunks
+                    .map(_.toByteBuffer)
+                    .toUnicastPublisher
+                    .use(s3.upload(uploadBucket, id.toString, tarEntry.getSize, _))
+                    .map { res =>
+                      val checksum = checksumToString(res.response().checksumSHA256())
+                      tarEntry.getName -> FileInfo(id, tarEntry.getSize, tarEntry.getName.split("/").last, checksum)
+                    }
+                )
+              }
+            } else Stream.empty
           } ++
           unarchiveAndUploadToS3(tarInputStream)
       }
