@@ -33,7 +33,8 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         metadataFileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$batchRef/TRE-$batchRef-metadata.json"))(
           new RuntimeException(s"Cannot find metadata for $batchRef")
         )
-        treMetadata <- fileProcessor.readJsonFromPackage(metadataFileInfo.id)
+        potentialTreMetadata <- fileProcessor.readJsonFromPackage(metadataFileInfo.id)
+        treMetadata <- IO.fromEither(potentialTreMetadata)
         parsedUri <- fileProcessor.parseUri(treMetadata.parameters.PARSER.uri)
         payload = treMetadata.parameters.TRE.payload
         cite = treMetadata.parameters.PARSER.cite

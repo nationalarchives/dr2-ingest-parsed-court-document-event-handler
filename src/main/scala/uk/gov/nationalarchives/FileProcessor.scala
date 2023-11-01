@@ -7,6 +7,7 @@ import fs2.compression.Compression
 import fs2.interop.reactivestreams._
 import fs2.io._
 import fs2.{Chunk, Pipe, Stream, text}
+import io.circe
 import io.circe.Json.Null
 import io.circe.generic.auto._
 import io.circe.generic.extras.Configuration
@@ -20,6 +21,7 @@ import uk.gov.nationalarchives.FileProcessor._
 
 import java.io.{BufferedInputStream, InputStream}
 import java.nio.ByteBuffer
+import java.time.OffsetDateTime
 import java.util.{Base64, UUID}
 
 class FileProcessor(
@@ -44,7 +46,7 @@ class FileProcessor(
       .map(_.toMap)
   }
 
-  def readJsonFromPackage(metadataId: UUID): IO[TREMetadata] = {
+  def readJsonFromPackage(metadataId: UUID): IO[Either[Exception, TREMetadata]] = {
     for {
       s3Stream <- s3.download(uploadBucket, metadataId.toString)
       contentString <- s3Stream
@@ -53,8 +55,14 @@ class FileProcessor(
         .through(extractMetadataFromJson)
         .compile
         .toList
-      parsedJson <- IO.fromOption(contentString.headOption)(new RuntimeException("Error parsing json"))
-    } yield parsedJson
+      potentialParsedJson <- IO.fromOption {
+        contentString.headOption
+      }(new RuntimeException("Unknown error occurred parsing the metadata.json file"))
+    } yield potentialParsedJson.left.map { e =>
+      new Exception(
+        s"Error parsing metadata.json:\n${e.getMessage}.\nPlease check that the JSON is valid and that all required fields are present"
+      )
+    }
   }
 
   def parseUri(potentialUri: Option[String]): IO[Option[ParsedUri]] = {
@@ -144,11 +152,11 @@ class FileProcessor(
     }
   }.sequence
 
-  private def extractMetadataFromJson(str: Stream[IO, Byte]): Stream[IO, TREMetadata] = {
+  private def extractMetadataFromJson(str: Stream[IO, Byte]): Stream[IO, Either[circe.Error, TREMetadata]] = {
     str
       .through(text.utf8.decode)
       .flatMap { jsonString =>
-        Stream.fromEither[IO](decode[TREMetadata](jsonString))
+        Stream(decode[TREMetadata](jsonString))
       }
   }
 
@@ -346,9 +354,14 @@ object FileProcessor {
 
   case class Payload(filename: String)
 
-  case class TREParams(payload: Payload)
+  case class TREParams(reference: String, payload: Payload)
 
-  case class TDRParams(`Document-Checksum-sha256`: String)
+  case class TDRParams(
+      `Document-Checksum-sha256`: String,
+      `Source-Organization`: String,
+      `Internal-Sender-Identifier`: String,
+      `Consignment-Export-Datetime`: OffsetDateTime
+  )
 
   case class TREMetadataParameters(PARSER: Parser, TRE: TREParams, TDR: TDRParams)
 
