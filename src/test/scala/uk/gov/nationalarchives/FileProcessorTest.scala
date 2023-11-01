@@ -67,7 +67,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     CompletedUpload.builder.response(putObjectResponse).build
   }
 
-  "copyFilesToBucket" should "return the correct file metadata for a valid tar.gz file" in {
+  "copyFilesFromDownloadToUploadBucket" should "return the correct file metadata for a valid tar.gz file" in {
     val generator = UUIDGenerator()
     val s3 = mock[DAS3Client[IO]]
     val docxCompletedUpload = completedUpload(Option("abcdef"))
@@ -102,7 +102,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     metadataInfo.checksum should equal("123456")
   }
 
-  "copyFilesToBucket" should "return an error if the downloaded file is not a valid tar.gz" in {
+  "copyFilesFromDownloadToUploadBucket" should "return an error if the downloaded file is not a valid tar.gz" in {
     val s3 = mock[DAS3Client[IO]]
     when(s3.download(ArgumentMatchers.eq("download"), ArgumentMatchers.eq("key")))
       .thenReturn(IO(Flux.just(ByteBuffer.wrap("invalid".getBytes))))
@@ -114,7 +114,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     ex.getMessage should equal("UpStream failed")
   }
 
-  "copyFilesToBucket" should "return an error if the file download fails" in {
+  "copyFilesFromDownloadToUploadBucket" should "return an error if the file download fails" in {
     val s3 = mock[DAS3Client[IO]]
     when(s3.download(ArgumentMatchers.eq("download"), ArgumentMatchers.eq("key")))
       .thenThrow(new RuntimeException("Error downloading files"))
@@ -126,7 +126,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     ex.getMessage should equal("Error downloading files")
   }
 
-  "copyFilesToBucket" should "return an error if the upload fails" in {
+  "copyFilesFromDownloadToUploadBucket" should "return an error if the upload fails" in {
     val s3 = mock[DAS3Client[IO]]
 
     when(s3.download(ArgumentMatchers.eq("download"), ArgumentMatchers.eq("key"))).thenReturn(IO(publisher))
@@ -141,7 +141,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     ex.getMessage should equal("Upload failed")
   }
 
-  "copyFilesToBucket" should "return an empty checksum if a checksum is not returned from S3" in {
+  "copyFilesFromDownloadToUploadBucket" should "return an empty checksum if a checksum is not returned from S3" in {
     val generator = UUIDGenerator()
     val s3 = mock[DAS3Client[IO]]
     val docxCompletedUpload = completedUpload()
