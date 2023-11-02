@@ -29,12 +29,22 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         outputBucket = config.outputBucket
         fileProcessor = new FileProcessor(treInput.parameters.s3Bucket, outputBucket, batchRef, s3, randomUuidGenerator)
         fileNameToFileInfo <- fileProcessor.copyFilesFromDownloadToUploadBucket(treInput.parameters.s3Key)
-
         metadataFileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$batchRef/TRE-$batchRef-metadata.json"))(
           new RuntimeException(s"Cannot find metadata for $batchRef")
         )
+
         treMetadata <- fileProcessor.readJsonFromPackage(metadataFileInfo.id)
-        parsedUri <- fileProcessor.parseUri(treMetadata.parameters.PARSER.uri)
+        uri = treMetadata.parameters.PARSER.uri
+        fileName = treMetadata.parameters.PARSER.name
+        _ <- {
+          val uriContainsPressSummary = uri.getOrElse("").contains("/press-summary/")
+          val fileNameDoesNotStartWithPressSummaryOf = !fileName.getOrElse("").startsWith("Press Summary of ")
+          if (uriContainsPressSummary && fileNameDoesNotStartWithPressSummaryOf)
+            IO.raiseError(new Exception("URI contains '/press-summary/' but file does not start with 'Press Summary of '"))
+          else IO.unit
+        }
+
+        parsedUri <- fileProcessor.parseUri(uri)
         payload = treMetadata.parameters.TRE.payload
         cite = treMetadata.parameters.PARSER.cite
 
@@ -47,7 +57,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           metadataFileInfo,
           parsedUri,
           cite,
-          treMetadata.parameters.PARSER.name,
+          fileName,
           output.department,
           output.series
         )
