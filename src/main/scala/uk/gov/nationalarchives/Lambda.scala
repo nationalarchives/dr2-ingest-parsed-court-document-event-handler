@@ -37,10 +37,10 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         uri = treMetadata.parameters.PARSER.uri
         fileName = treMetadata.parameters.PARSER.name
         _ <- {
-          val uriContainsPressSummary = uri.getOrElse("").contains("/press-summary/")
+          val uriContainsPressSummary = uri.getOrElse("").contains("/press-summary")
           val fileNameDoesNotStartWithPressSummaryOf = !fileName.getOrElse("").startsWith("Press Summary of ")
           if (uriContainsPressSummary && fileNameDoesNotStartWithPressSummaryOf)
-            IO.raiseError(new Exception("URI contains '/press-summary/' but file does not start with 'Press Summary of '"))
+            IO.raiseError(new Exception("URI contains '/press-summary' but file does not start with 'Press Summary of '"))
           else IO.unit
         }
 
