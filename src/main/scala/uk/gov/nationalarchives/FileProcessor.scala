@@ -330,7 +330,7 @@ object FileProcessor {
 
   case class FileInfo(id: UUID, fileSize: Long, fileName: String, checksum: String)
 
-  case class TREInputParameters(status: String, reference: String, s3Bucket: String, s3Key: String)
+  case class TREInputParameters(status: String, reference: String, skipSeriesLookup: Boolean, s3Bucket: String, s3Key: String)
 
   case class TREInput(parameters: TREInputParameters)
 

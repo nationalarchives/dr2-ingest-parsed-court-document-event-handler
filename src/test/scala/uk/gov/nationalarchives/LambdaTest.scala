@@ -55,7 +55,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
   val sfnServer = new WireMockServer(9004)
   val testOutputBucket = "outputBucket"
   val inputBucket = "inputBucket"
-  val packageAvailable: TREInput = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
+  val packageAvailable: TREInput = TREInput(
+    TREInputParameters("status", "TEST-REFERENCE", skipSeriesLookup = false, inputBucket, "test.tar.gz")
+  )
   val event: SQSEvent = createEvent(packageAvailable.asJson.printWith(Printer.noSpaces))
   val expectedDeleteRequestXml: String =
     """<?xml version="1.0" encoding="UTF-8"?><Delete xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
