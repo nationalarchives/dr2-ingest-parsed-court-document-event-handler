@@ -168,12 +168,10 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     val metadataId = UUID.randomUUID()
     when(s3.download(ArgumentMatchers.eq("upload"), ArgumentMatchers.eq(metadataId.toString)))
       .thenReturn(IO(downloadResponse))
-
+    val expectedMetadata = decode[TREMetadata](metadataJson).toOption.get
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
 
     val res = fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
-
-    val expectedMetadata = decode[TREMetadata](metadataJson).toOption.get
     res should equal(expectedMetadata)
   }
 
