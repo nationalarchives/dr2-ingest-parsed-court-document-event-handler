@@ -6,7 +6,7 @@ import com.amazonaws.services.lambda.runtime.events.SQSEvent.SQSMessage
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.http.RequestMethod
-import io.circe.{Decoder, Printer}
+import io.circe.{Decoder, DecodingFailure, Printer}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
@@ -323,19 +323,15 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
     val ex = intercept[Exception] {
       IngestParserTest().handleRequest(event, null)
     }
-    ex.getMessage should equal("""Error parsing metadata.json:
-                                 |expected json value got 'invali...' (line 1, column 1).
-                                 |Please check that the JSON is valid and that all required fields are present""".stripMargin)
+    ex.getMessage should equal("expected json value got 'invali...' (line 1, column 1)")
   }
 
   "the lambda" should "error if the json in the metadata file is missing required fields" in {
     stubAWSRequests(inputBucket, metadataJsonOpt = Option("{}"))
-    val ex = intercept[Exception] {
+    val ex = intercept[DecodingFailure] {
       IngestParserTest().handleRequest(event, null)
     }
-    ex.getMessage should equal("""Error parsing metadata.json:
-        |DecodingFailure at .parameters: Missing required field.
-        |Please check that the JSON is valid and that all required fields are present""".stripMargin)
+    ex.getMessage should equal("DecodingFailure at .parameters: Missing required field")
   }
 
   "the lambda" should "error if the json in the metadata file has a field with a non-optional value that is null" in {
@@ -350,9 +346,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
     val ex = intercept[Exception] {
       IngestParserTest().handleRequest(event, null)
     }
-    ex.getMessage should equal("""Error parsing metadata.json:
-        |DecodingFailure at .parameters.TDR.Document-Checksum-sha256: Got value 'null' with wrong type, expecting string.
-        |Please check that the JSON is valid and that all required fields are present""".stripMargin)
+    ex.getMessage should equal(
+      "DecodingFailure at .parameters.TDR.Document-Checksum-sha256: Got value 'null' with wrong type, expecting string"
+    )
   }
 
   "the lambda" should "error if S3 is unavailable" in {
