@@ -81,17 +81,20 @@ class FileProcessor(
       series: Option[String]
   ): IO[String] = {
     val potentialCiteFromUri = parsedUri.flatMap(_.potentialCite)
-    val (folderName, folderTitle) = if (department.flatMap(_ => series).isEmpty && potentialCiteFromUri.isDefined) {
-      ("Court Documents (court not matched)", None)
-    } else if (potentialCiteFromUri.isEmpty) {
-      ("Court Documents (court unknown)", None)
-    } else {
-      (parsedUri.get.uriWithoutDocType, Option(judgmentName.map(_.stripPrefix("Press Summary of ")).getOrElse("")))
-    }
+    val (folderName, folderTitle, uriIdField) =
+      if (department.flatMap(_ => series).isEmpty && potentialCiteFromUri.isDefined)
+        ("Court Documents (court not matched)", None, Nil)
+      else if (potentialCiteFromUri.isEmpty) ("Court Documents (court unknown)", None, Nil)
+      else
+        (
+          parsedUri.get.uriWithoutDocType,
+          Option(judgmentName.map(_.stripPrefix("Press Summary of ")).getOrElse("")),
+          List(IdField("URI", parsedUri.get.uriWithoutDocType))
+        )
 
     val idFields = potentialCite
       .map { cite =>
-        List(IdField("Code", cite), IdField("Cite", cite))
+        List(IdField("Code", cite), IdField("Cite", cite)) ++ uriIdField
       }
       .getOrElse(Nil)
     val fileTitle = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
