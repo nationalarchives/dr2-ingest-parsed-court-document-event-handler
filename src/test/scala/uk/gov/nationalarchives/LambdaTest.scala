@@ -317,10 +317,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
          |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
          |"PARSER":{"cite":"cite","uri":"https://example.com/id/cite/press-summary/3/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
 
-    val tarFileWithPressSummaryInUri = "PressSummaryOf-missing-from-name-test.tar.gz"
-    stubAWSRequests(inputBucket, tarFileName = tarFileWithPressSummaryInUri, metadataJsonOpt = Option(metadataJson))
+    stubAWSRequests(inputBucket, metadataJsonOpt = Option(metadataJson))
     val ex = intercept[Exception] {
-      IngestParserTest().handleRequest(event(tarFileWithPressSummaryInUri), null)
+      IngestParserTest().handleRequest(event(), null)
     }
     ex.getMessage should equal("URI contains '/press-summary' but file does not start with 'Press Summary of '")
   }
