@@ -295,16 +295,18 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
                     fileString: String,
                     checksum: String
                 ): ArgumentMatcher[Publisher[ByteBuffer]] = {
-                  val publisherMatcher = new ArgumentMatcher[Publisher[ByteBuffer]] {
-                    override def matches(argument: Publisher[ByteBuffer]): Boolean = {
-                      val arg = argument
-                        .toStreamBuffered[IO](1024)
-                        .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
-                        .through(text.utf8.decode)
-                        .compile
-                        .string
-                        .unsafeRunSync()
-                      arg == fileString
+                  val publisherMatcher = {
+                    new ArgumentMatcher[Publisher[ByteBuffer]] {
+                      override def matches(argument: Publisher[ByteBuffer]): Boolean = {
+                        val arg = argument
+                          .toStreamBuffered[IO](1024)
+                          .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
+                          .through(text.utf8.decode)
+                          .compile
+                          .string
+                          .unsafeRunSync()
+                        arg == fileString
+                      }
                     }
                   }
                   when(
