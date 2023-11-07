@@ -7,7 +7,6 @@ import fs2.compression.Compression
 import fs2.interop.reactivestreams._
 import fs2.io._
 import fs2.{Chunk, Pipe, Stream, text}
-import io.circe
 import io.circe.Json.Null
 import io.circe.generic.auto._
 import io.circe.generic.extras.Configuration
@@ -46,7 +45,7 @@ class FileProcessor(
       .map(_.toMap)
   }
 
-  def readJsonFromPackage(metadataId: UUID): IO[Either[Exception, TREMetadata]] = {
+  def readJsonFromPackage(metadataId: UUID): IO[TREMetadata] = {
     for {
       s3Stream <- s3.download(uploadBucket, metadataId.toString)
       contentString <- s3Stream
@@ -55,14 +54,12 @@ class FileProcessor(
         .through(extractMetadataFromJson)
         .compile
         .toList
-      potentialParsedJson <- IO.fromOption {
-        contentString.headOption
-      }(new RuntimeException("Unknown error occurred parsing the metadata.json file"))
-    } yield potentialParsedJson.left.map { e =>
-      new Exception(
-        s"Error parsing metadata.json:\n${e.getMessage}.\nPlease check that the JSON is valid and that all required fields are present"
+      parsedJson <- IO.fromOption(contentString.headOption)(
+        new RuntimeException(
+          "Error parsing metadata.json.\nPlease check that the JSON is valid and that all required fields are present"
+        )
       )
-    }
+    } yield parsedJson
   }
 
   def parseUri(potentialUri: Option[String]): IO[Option[ParsedUri]] = {
@@ -152,11 +149,11 @@ class FileProcessor(
     }
   }.sequence
 
-  private def extractMetadataFromJson(str: Stream[IO, Byte]): Stream[IO, Either[circe.Error, TREMetadata]] = {
+  private def extractMetadataFromJson(str: Stream[IO, Byte]): Stream[IO, TREMetadata] = {
     str
       .through(text.utf8.decode)
       .flatMap { jsonString =>
-        Stream(decode[TREMetadata](jsonString))
+        Stream.fromEither[IO](decode[TREMetadata](jsonString))
       }
   }
 

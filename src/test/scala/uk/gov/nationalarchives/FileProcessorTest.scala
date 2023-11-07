@@ -4,7 +4,10 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import fs2.interop.reactivestreams._
 import fs2.{Chunk, Stream, text}
-import io.circe.{Decoder, HCursor, Printer}
+import io.circe.generic.auto._
+import io.circe.parser.decode
+import io.circe.syntax.EncoderOps
+import io.circe.{Decoder, DecodingFailure, HCursor, ParsingFailure, Printer}
 import org.mockito.ArgumentMatchers._
 import org.mockito.{ArgumentMatcher, ArgumentMatchers, MockitoSugar}
 import org.reactivestreams.Publisher
@@ -15,9 +18,6 @@ import reactor.core.publisher.Flux
 import software.amazon.awssdk.services.s3.model.PutObjectResponse
 import software.amazon.awssdk.transfer.s3.model.CompletedUpload
 import uk.gov.nationalarchives.FileProcessor._
-import io.circe.parser.decode
-import io.circe.generic.auto._
-import io.circe.syntax.EncoderOps
 
 import java.nio.ByteBuffer
 import java.util.{Base64, HexFormat, UUID}
@@ -168,13 +168,13 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     val metadataId = UUID.randomUUID()
     when(s3.download(ArgumentMatchers.eq("upload"), ArgumentMatchers.eq(metadataId.toString)))
       .thenReturn(IO(downloadResponse))
+    val expectedMetadata = decode[TREMetadata](metadataJson).toOption.get
 
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
 
     val res = fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
 
-    val expectedMetadata = decode[TREMetadata](metadataJson).toOption.get
-    res should equal(Right(expectedMetadata))
+    res should equal(expectedMetadata)
   }
 
   "readJsonFromPackage" should "return an error where a non-optional value was expected for a field in the json" in {
@@ -191,16 +191,13 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
 
-    val res = fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
-
-    res.isLeft should be(true)
-    res.left.foreach {
-      _.getMessage should equal(
-        """Error parsing metadata.json:
-          |DecodingFailure at .parameters.TDR.Document-Checksum-sha256: Got value 'null' with wrong type, expecting string.
-          |Please check that the JSON is valid and that all required fields are present""".stripMargin
-      )
+    val ex = intercept[DecodingFailure] {
+      fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
     }
+
+    ex.getMessage should equal(
+      """DecodingFailure at .parameters.TDR.Document-Checksum-sha256: Got value 'null' with wrong type, expecting string""".stripMargin
+    )
   }
 
   "readJsonFromPackage" should "return an error for a json that is missing required fields" in {
@@ -217,16 +214,13 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
 
-    val res = fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
-
-    res.isLeft should be(true)
-    res.left.foreach {
-      _.getMessage should equal(
-        """Error parsing metadata.json:
-          |DecodingFailure at .parameters.Source-Organization: Missing required field.
-          |Please check that the JSON is valid and that all required fields are present""".stripMargin
-      )
+    val ex = intercept[DecodingFailure] {
+      fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
     }
+
+    ex.getMessage should equal(
+      """DecodingFailure at .parameters.Source-Organization: Missing required field""".stripMargin
+    )
   }
 
   "readJsonFromPackage" should "return an error for an invalid json" in {
@@ -238,15 +232,13 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
       .thenReturn(IO(downloadResponse))
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
 
-    val res = fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
-
-    res.left.foreach {
-      _.getMessage should equal(
-        """Error parsing metadata.json:
-                                                 |expected json value got 'invali...' (line 1, column 1).
-                                                 |Please check that the JSON is valid and that all required fields are present""".stripMargin
-      )
+    val ex = intercept[ParsingFailure] {
+      fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
     }
+
+    ex.getMessage should equal(
+      """expected json value got 'invali...' (line 1, column 1)""".stripMargin
+    )
   }
 
   "readJsonFromPackage" should "return an error if the download from s3 fails" in {
