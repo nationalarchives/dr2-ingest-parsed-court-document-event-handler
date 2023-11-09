@@ -43,7 +43,12 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         )
 
         _ <- IO.raiseWhen(fileInfo.fileSize == 0)(new Exception(s"File id '${fileInfo.id}' size is 0"))
-        output <- seriesMapper.createOutput(config.outputBucket, batchRef, parsedUri.flatMap(_.potentialCite))
+        output <- seriesMapper.createOutput(
+          config.outputBucket,
+          batchRef,
+          parsedUri.flatMap(_.potentialCite),
+          treInput.parameters.skipSeriesLookup
+        )
         _ <- fileProcessor.createMetadataFiles(
           fileInfo.copy(checksum = treMetadata.parameters.TDR.`Document-Checksum-sha256`),
           metadataFileInfo,
