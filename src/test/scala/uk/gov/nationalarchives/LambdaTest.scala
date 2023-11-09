@@ -55,7 +55,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
   val sfnServer = new WireMockServer(9004)
   val testOutputBucket = "outputBucket"
   val inputBucket = "inputBucket"
-  val packageAvailable: TREInput = TREInput(TREInputParameters("status", "TEST-REFERENCE", inputBucket, "test.tar.gz"))
+  val packageAvailable: TREInput = TREInput(
+    TREInputParameters("status", "TEST-REFERENCE", skipSeriesLookup = false, inputBucket, "test.tar.gz")
+  )
   val event: SQSEvent = createEvent(packageAvailable.asJson.printWith(Printer.noSpaces))
   val expectedDeleteRequestXml: String =
     """<?xml version="1.0" encoding="UTF-8"?><Delete xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
@@ -357,5 +359,15 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
       IngestParserTest().handleRequest(event, null)
     }
     ex.getMessage should equal("Failed to send the request: socket connection refused.")
+  }
+
+  "the lambda" should "succeed even if the`skipSeriesLookup` parameter is missing from the 'parameters' json " in {
+    val eventWithoutSkipParameter =
+      """{"parameters":{"status":"status","reference":"TEST-REFERENCE","s3Bucket":"inputBucket","s3Key":"test.tar.gz"}}"""
+    val event = createEvent(eventWithoutSkipParameter)
+    stubAWSRequests(inputBucket)
+
+    IngestParserTest().handleRequest(event, null)
+    // All good, no "DecodingFailure at .skipSeriesLookup: Missing required field" thrown
   }
 }
