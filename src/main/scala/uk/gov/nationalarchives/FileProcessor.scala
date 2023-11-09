@@ -17,6 +17,7 @@ import io.circe.{Decoder, Encoder, HCursor, Json, Printer}
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import uk.gov.nationalarchives.FileProcessor._
+import uk.gov.nationalarchives.UriProcessor.ParsedUri
 
 import java.io.{BufferedInputStream, InputStream}
 import java.nio.ByteBuffer
@@ -60,20 +61,6 @@ class FileProcessor(
         )
       )
     } yield parsedJson
-  }
-
-  def parseUri(potentialUri: Option[String]): IO[Option[ParsedUri]] = {
-    potentialUri.map { uri =>
-      val citeRegex = "^.*/id/([a-z]*)/".r
-      val uriWithoutDocTypeRegex = """(^.*/\d{4}/\d*)""".r
-      val potentialCite = citeRegex.findFirstMatchIn(uri).map(_.group(1))
-      val potentialUriWithoutDocType = uriWithoutDocTypeRegex.findFirstMatchIn(uri).map(_.group(1))
-      IO.fromOption(potentialUriWithoutDocType)(
-        new RuntimeException(s"Failure trying to trim off the doc type for $uri. Is the year missing?")
-      ).map { uriWithoutDocType =>
-        ParsedUri(potentialCite, uriWithoutDocType)
-      }
-    }.sequence
   }
 
   def createMetadataFiles(
@@ -338,8 +325,6 @@ object FileProcessor {
       name: String,
       fileSize: Long
   ) extends BagitMetadataObject
-
-  case class ParsedUri(potentialCite: Option[String], uriWithoutDocType: String)
 
   case class FileInfo(id: UUID, fileSize: Long, fileName: String, checksum: String)
 

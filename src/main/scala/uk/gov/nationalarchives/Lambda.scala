@@ -36,15 +36,10 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         treMetadata <- fileProcessor.readJsonFromPackage(metadataFileInfo.id)
         uri = treMetadata.parameters.PARSER.uri
         fileName = treMetadata.parameters.PARSER.name
-        _ <- {
-          val uriContainsPressSummary = uri.exists(_.contains("/press-summary"))
-          val fileNameDoesNotStartWithPressSummaryOf = !fileName.exists(_.startsWith("Press Summary of "))
-          if (uriContainsPressSummary && fileNameDoesNotStartWithPressSummaryOf)
-            IO.raiseError(new Exception("URI contains '/press-summary' but file does not start with 'Press Summary of '"))
-          else IO.unit
-        }
+        uriProcessor = new UriProcessor(uri)
+        _ <- uriProcessor.verifyFileNameStartsWithPressSummaryOfIfInUri(fileName)
 
-        parsedUri <- fileProcessor.parseUri(uri)
+        parsedUri <- uriProcessor.getCiteAndUriWithoutDocType
         payload = treMetadata.parameters.TRE.payload
         cite = treMetadata.parameters.PARSER.cite
 
