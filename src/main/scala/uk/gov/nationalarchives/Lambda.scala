@@ -34,14 +34,14 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         )
 
         treMetadata <- fileProcessor.readJsonFromPackage(metadataFileInfo.id)
-        uri = treMetadata.parameters.PARSER.uri
-        fileName = treMetadata.parameters.PARSER.name
-        uriProcessor = new UriProcessor(uri)
-        _ <- uriProcessor.verifyFileNameStartsWithPressSummaryOfIfInUri(fileName)
+        potentialUri = treMetadata.parameters.PARSER.uri
+        potentialFileName = treMetadata.parameters.PARSER.name
+        uriProcessor = new UriProcessor(potentialUri)
+        _ <- uriProcessor.verifyFileNameStartsWithPressSummaryOfIfInUri(potentialFileName)
 
         parsedUri <- uriProcessor.getCiteAndUriWithoutDocType
         payload = treMetadata.parameters.TRE.payload
-        cite = treMetadata.parameters.PARSER.cite
+        potentialCite = treMetadata.parameters.PARSER.cite
 
         fileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$batchRef/${payload.filename}"))(
           new RuntimeException(s"Document not found for file belonging to $batchRef")
@@ -56,8 +56,8 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           fileInfo.copy(checksum = treMetadata.parameters.TDR.`Document-Checksum-sha256`),
           metadataFileInfo,
           parsedUri,
-          cite,
-          fileName,
+          potentialCite,
+          potentialFileName,
           output.department,
           output.series
         )
