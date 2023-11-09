@@ -333,7 +333,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
     val ex = intercept[Exception] {
       IngestParserTest().handleRequest(event(zeroBytesTarFileName), null)
     }
-    ex.getMessage should equal("The size of a file in this tar file is 0")
+    ex.getMessage should equal("File id 'c7e6b27f-5778-4da8-9b83-1b64bbccbd03' size is 0")
   }
 
   "the lambda" should "error if S3 is unavailable" in {

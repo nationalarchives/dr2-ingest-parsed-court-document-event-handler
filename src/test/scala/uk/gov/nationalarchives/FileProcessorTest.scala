@@ -161,25 +161,6 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     res(s"$reference/TRE-$reference-metadata.json").checksum should equal("")
   }
 
-  "copyFilesFromDownloadToUploadBucket" should "return an error if the tar file contains a zero-byte file" in {
-    val generator = UUIDGenerator()
-    val s3 = mock[DAS3Client[IO]]
-    val docxCompletedUpload = completedUpload()
-    val metadataCompletedUpload = completedUpload()
-
-    val testTarGzWithZeroByteFile: Array[Byte] = getClass.getResourceAsStream("/files/zero-byte-test.tar.gz").readAllBytes()
-    val publisher: Flux[ByteBuffer] = Flux.just(ByteBuffer.wrap(testTarGzWithZeroByteFile))
-
-    when(s3.download(ArgumentMatchers.eq("download"), ArgumentMatchers.eq("key"))).thenReturn(IO(publisher))
-
-    val fileProcessor = new FileProcessor("download", "upload", "ref", s3, generator.uuidGenerator)
-
-    val ex = intercept[Exception] {
-      fileProcessor.copyFilesFromDownloadToUploadBucket("key").unsafeRunSync()
-    }
-    ex.getMessage should equal("The size of a file in this tar file is 0")
-  }
-
   "readJsonFromPackage" should "return the correct object for valid json" in {
     val s3 = mock[DAS3Client[IO]]
     val downloadResponse = Flux.just(ByteBuffer.wrap(metadataJson.getBytes()))
