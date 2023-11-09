@@ -20,6 +20,7 @@ import uk.gov.nationalarchives.FileProcessor._
 
 import java.io.{BufferedInputStream, InputStream}
 import java.nio.ByteBuffer
+import java.time.OffsetDateTime
 import java.util.{Base64, UUID}
 
 class FileProcessor(
@@ -53,7 +54,11 @@ class FileProcessor(
         .through(extractMetadataFromJson)
         .compile
         .toList
-      parsedJson <- IO.fromOption(contentString.headOption)(new RuntimeException("Error parsing json"))
+      parsedJson <- IO.fromOption(contentString.headOption)(
+        new RuntimeException(
+          "Error parsing metadata.json.\nPlease check that the JSON is valid and that all required fields are present"
+        )
+      )
     } yield parsedJson
   }
 
@@ -354,9 +359,14 @@ object FileProcessor {
 
   case class Payload(filename: String)
 
-  case class TREParams(payload: Payload)
+  case class TREParams(reference: String, payload: Payload)
 
-  case class TDRParams(`Document-Checksum-sha256`: String)
+  case class TDRParams(
+      `Document-Checksum-sha256`: String,
+      `Source-Organization`: String,
+      `Internal-Sender-Identifier`: String,
+      `Consignment-Export-Datetime`: OffsetDateTime
+  )
 
   case class TREMetadataParameters(PARSER: Parser, TRE: TREParams, TDR: TDRParams)
 

@@ -6,7 +6,7 @@ import com.amazonaws.services.lambda.runtime.events.SQSEvent.SQSMessage
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.http.RequestMethod
-import io.circe.{Decoder, Printer}
+import io.circe.{Decoder, DecodingFailure, Printer}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
@@ -131,7 +131,8 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
     )
 
     val metadataJson: String = metadataJsonOpt.getOrElse(
-      s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde"},
+      s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde", "Source-Organization": "test-organisation",
+         | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
          |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
          |"PARSER":{"cite":"cite","uri":"https://example.com/id/cite/2023/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
     )
@@ -205,7 +206,8 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
   forAll(citeTable) { (potentialCite, idFields) =>
     "the lambda" should s"write the correct metadata files to S3 with a cite ${potentialCite.orNull}" in {
       val metadataJson: String =
-        s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde"},
+        s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde", "Source-Organization": "test-organisation",
+           | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
            |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
            |"PARSER":{"cite":${potentialCite.orNull},"uri":"https://example.com/id/cite/2023/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
       stubAWSRequests(inputBucket, metadataJsonOpt = Option(metadataJson))
@@ -281,7 +283,8 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
     "the lambda" should s"start the state machine execution with a ${expectedSeries.orNull} series and ${expectedDepartment.orNull} department if the uri is ${uri.orNull} and the cite is ${cite.orNull}" in {
       val inputJson =
         s"""{"parameters":{
-           |"TDR": {"Document-Checksum-sha256": "abcde"},
+           |"TDR": {"Document-Checksum-sha256": "abcde", "Source-Organization": "test-organisation",
+           | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
            |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
            |"PARSER":{"cite": ${cite.orNull}, "uri":${uri.orNull},"name":"test"}}}""".stripMargin
 
@@ -318,11 +321,36 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
   }
 
   "the lambda" should "error if the json in the metadata file is invalid" in {
-    stubAWSRequests(inputBucket, metadataJsonOpt = Option("{}"))
+    stubAWSRequests(inputBucket, metadataJsonOpt = Option("invalidJson"))
     val ex = intercept[Exception] {
       IngestParserTest().handleRequest(event, null)
     }
-    ex.getMessage should equal("DecodingFailure at .parameters: Missing required field")
+    ex.getMessage should equal("""expected json value got 'invali...' (line 1, column 1)""".stripMargin)
+  }
+
+  "the lambda" should "error if the json in the metadata file is missing required fields" in {
+    stubAWSRequests(inputBucket, metadataJsonOpt = Option("{}"))
+    val ex = intercept[DecodingFailure] {
+      IngestParserTest().handleRequest(event, null)
+    }
+    ex.getMessage should equal("""DecodingFailure at .parameters: Missing required field""".stripMargin)
+  }
+
+  "the lambda" should "error if the json in the metadata file has a field with a non-optional value that is null" in {
+    stubAWSRequests(
+      inputBucket,
+      metadataJsonOpt =
+        Option(s"""{"parameters":{"TDR": {"Document-Checksum-sha256": null, "Source-Organization": "test-organisation",
+         |"Internal-Sender-Identifier": "test-identifier", "Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
+         |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
+         |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin)
+    )
+    val ex = intercept[Exception] {
+      IngestParserTest().handleRequest(event, null)
+    }
+    ex.getMessage should equal(
+      """DecodingFailure at .parameters.TDR.Document-Checksum-sha256: Got value 'null' with wrong type, expecting string""".stripMargin
+    )
   }
 
   "the lambda" should "error if S3 is unavailable" in {
