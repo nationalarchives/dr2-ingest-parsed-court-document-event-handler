@@ -13,13 +13,14 @@ import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto.{deriveConfiguredDecoder, deriveConfiguredEncoder}
 import io.circe.parser.decode
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder, Json, Printer}
+import io.circe.{Decoder, Encoder, HCursor, Json, Printer}
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import uk.gov.nationalarchives.FileProcessor._
 
 import java.io.{BufferedInputStream, InputStream}
 import java.nio.ByteBuffer
+import java.time.OffsetDateTime
 import java.util.{Base64, UUID}
 
 class FileProcessor(
@@ -53,7 +54,11 @@ class FileProcessor(
         .through(extractMetadataFromJson)
         .compile
         .toList
-      parsedJson <- IO.fromOption(contentString.headOption)(new RuntimeException("Error parsing json"))
+      parsedJson <- IO.fromOption(contentString.headOption)(
+        new RuntimeException(
+          "Error parsing metadata.json.\nPlease check that the JSON is valid and that all required fields are present"
+        )
+      )
     } yield parsedJson
   }
 
@@ -242,6 +247,14 @@ object FileProcessor {
   private val chunkSize: Int = 1024 * 64
   implicit val customConfig: Configuration = Configuration.default.withDefaults
   implicit val parserDecoder: Decoder[Parser] = deriveConfiguredDecoder
+  implicit val inputParametersDecoder: Decoder[TREInputParameters] = (c: HCursor) =>
+    for {
+      status <- c.downField("status").as[String]
+      reference <- c.downField("reference").as[String]
+      s3Bucket <- c.downField("s3Bucket").as[String]
+      s3Key <- c.downField("s3Key").as[String]
+      skipSeriesLookup <- c.getOrElse("skipSeriesLookup")(false)
+    } yield TREInputParameters(status, reference, skipSeriesLookup, s3Bucket, s3Key)
   implicit val bagitMetadataEncoder: Encoder[BagitMetadataObject] = {
     case BagitFolderMetadataObject(id, parentId, title, name, idFields) =>
       jsonFromMetadataObject(id, parentId, title, ArchiveFolder, name).deepMerge {
@@ -330,7 +343,7 @@ object FileProcessor {
 
   case class FileInfo(id: UUID, fileSize: Long, fileName: String, checksum: String)
 
-  case class TREInputParameters(status: String, reference: String, s3Bucket: String, s3Key: String)
+  case class TREInputParameters(status: String, reference: String, skipSeriesLookup: Boolean, s3Bucket: String, s3Key: String)
 
   case class TREInput(parameters: TREInputParameters)
 
@@ -346,9 +359,14 @@ object FileProcessor {
 
   case class Payload(filename: String)
 
-  case class TREParams(payload: Payload)
+  case class TREParams(reference: String, payload: Payload)
 
-  case class TDRParams(`Document-Checksum-sha256`: String)
+  case class TDRParams(
+      `Document-Checksum-sha256`: String,
+      `Source-Organization`: String,
+      `Internal-Sender-Identifier`: String,
+      `Consignment-Export-Datetime`: OffsetDateTime
+  )
 
   case class TREMetadataParameters(PARSER: Parser, TRE: TREParams, TDR: TDRParams)
 

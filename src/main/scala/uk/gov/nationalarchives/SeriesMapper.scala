@@ -4,7 +4,12 @@ import cats.effect._
 import uk.gov.nationalarchives.SeriesMapper._
 
 class SeriesMapper(courts: Set[Court]) {
-  def createOutput(uploadBucket: String, batchId: String, potentialCite: Option[String]): IO[Output] = {
+  def createOutput(
+      uploadBucket: String,
+      batchId: String,
+      potentialCite: Option[String],
+      skipSeriesLookup: Boolean
+  ): IO[Output] = {
     potentialCite
       .map { cite =>
         val filteredSeries = courts.filter(court => cite.toUpperCase.contains(court.code))
@@ -13,6 +18,8 @@ class SeriesMapper(courts: Set[Court]) {
             IO.raiseError(
               new RuntimeException(s"$size entries found when looking up series for cite $cite and batchId $batchId")
             )
+          case size if size == 0 && skipSeriesLookup => IO(Output(batchId, uploadBucket, s"$batchId/", None, None))
+          case size if size == 0                     => IO.raiseError(new Exception("Cannot find series and department for cite"))
           case _ =>
             IO {
               val court = filteredSeries.headOption

@@ -51,7 +51,12 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         fileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$batchRef/${payload.filename}"))(
           new RuntimeException(s"Document not found for file belonging to $batchRef")
         )
-        output <- seriesMapper.createOutput(config.outputBucket, batchRef, parsedUri.flatMap(_.potentialCite))
+        output <- seriesMapper.createOutput(
+          config.outputBucket,
+          batchRef,
+          parsedUri.flatMap(_.potentialCite),
+          treInput.parameters.skipSeriesLookup
+        )
         _ <- fileProcessor.createMetadataFiles(
           fileInfo.copy(checksum = treMetadata.parameters.TDR.`Document-Checksum-sha256`),
           metadataFileInfo,

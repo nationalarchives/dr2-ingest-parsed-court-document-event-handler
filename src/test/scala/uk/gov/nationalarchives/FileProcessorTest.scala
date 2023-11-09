@@ -4,7 +4,10 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import fs2.interop.reactivestreams._
 import fs2.{Chunk, Stream, text}
-import io.circe.{Decoder, HCursor, Printer}
+import io.circe.generic.auto._
+import io.circe.parser.decode
+import io.circe.syntax.EncoderOps
+import io.circe.{Decoder, DecodingFailure, HCursor, ParsingFailure, Printer}
 import org.mockito.ArgumentMatchers._
 import org.mockito.{ArgumentMatcher, ArgumentMatchers, MockitoSugar}
 import org.reactivestreams.Publisher
@@ -15,9 +18,6 @@ import reactor.core.publisher.Flux
 import software.amazon.awssdk.services.s3.model.PutObjectResponse
 import software.amazon.awssdk.transfer.s3.model.CompletedUpload
 import uk.gov.nationalarchives.FileProcessor._
-import io.circe.parser.decode
-import io.circe.generic.auto._
-import io.circe.syntax.EncoderOps
 
 import java.nio.ByteBuffer
 import java.util.{Base64, HexFormat, UUID}
@@ -39,7 +39,8 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     }
 
   val metadataJson: String =
-    s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde"},
+    s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde", "Source-Organization": "test-organisation",
+       | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
        |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
        |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
 
@@ -168,13 +169,61 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     when(s3.download(ArgumentMatchers.eq("upload"), ArgumentMatchers.eq(metadataId.toString)))
       .thenReturn(IO(downloadResponse))
     val expectedMetadata = decode[TREMetadata](metadataJson).toOption.get
+
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
 
     val res = fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
+
     res should equal(expectedMetadata)
   }
 
-  "readJsonFromPackage" should "return an error for invalid json" in {
+  "readJsonFromPackage" should "return an error where a non-optional value was expected for a field in the json" in {
+    val s3 = mock[DAS3Client[IO]]
+    val metadataJsonWithMissingParams: String =
+      s"""{"parameters":{"TDR": {"Document-Checksum-sha256": null, "Source-Organization": "test-organisation",
+         |"Internal-Sender-Identifier": "test-identifier", "Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
+         |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
+         |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
+    val downloadResponse = Flux.just(ByteBuffer.wrap(metadataJsonWithMissingParams.getBytes()))
+    val metadataId = UUID.randomUUID()
+    when(s3.download(ArgumentMatchers.eq("upload"), ArgumentMatchers.eq(metadataId.toString)))
+      .thenReturn(IO(downloadResponse))
+
+    val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
+
+    val ex = intercept[DecodingFailure] {
+      fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
+    }
+
+    ex.getMessage should equal(
+      """DecodingFailure at .parameters.TDR.Document-Checksum-sha256: Got value 'null' with wrong type, expecting string""".stripMargin
+    )
+  }
+
+  "readJsonFromPackage" should "return an error for a json that is missing required fields" in {
+    val s3 = mock[DAS3Client[IO]]
+    val metadataJsonWithMissingParams: String =
+      s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde","Internal-Sender-Identifier": "test-identifier",
+         |"Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
+         |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
+         |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
+    val downloadResponse = Flux.just(ByteBuffer.wrap(metadataJsonWithMissingParams.getBytes()))
+    val metadataId = UUID.randomUUID()
+    when(s3.download(ArgumentMatchers.eq("upload"), ArgumentMatchers.eq(metadataId.toString)))
+      .thenReturn(IO(downloadResponse))
+
+    val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
+
+    val ex = intercept[DecodingFailure] {
+      fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
+    }
+
+    ex.getMessage should equal(
+      """DecodingFailure at .parameters.Source-Organization: Missing required field""".stripMargin
+    )
+  }
+
+  "readJsonFromPackage" should "return an error for an invalid json" in {
     val s3 = mock[DAS3Client[IO]]
     val invalidJson = "invalid"
     val downloadResponse = Flux.just(ByteBuffer.wrap(invalidJson.getBytes()))
@@ -183,10 +232,13 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
       .thenReturn(IO(downloadResponse))
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
 
-    val ex = intercept[Exception] {
+    val ex = intercept[ParsingFailure] {
       fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
     }
-    ex.getMessage should equal("""expected json value got 'invali...' (line 1, column 1)""")
+
+    ex.getMessage should equal(
+      """expected json value got 'invali...' (line 1, column 1)""".stripMargin
+    )
   }
 
   "readJsonFromPackage" should "return an error if the download from s3 fails" in {
