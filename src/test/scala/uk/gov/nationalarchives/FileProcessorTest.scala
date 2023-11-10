@@ -296,7 +296,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     {
       forAll(treNameTable) { (treName, treFileName, expectedFolderTitle, expectedAssetTitle) =>
         forAll(urlDepartmentAndSeriesTable) { (department, series, _, parsedUri, expectedFolderName, titleExpected) =>
-          "createMetadataFiles" should s"generate the correct bagit Metadata with $expectedFolderTitle, $expectedAssetTitle and $idFields" +
+          "createBagitMetadataObjects" should s"generate the correct bagit Metadata with $expectedFolderTitle, $expectedAssetTitle and $idFields" +
             s"for $department, $series, $parsedUri and TRE name $treName" in {
               val fileId = UUID.randomUUID()
               val metadataId = UUID.randomUUID()
@@ -320,7 +320,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
               val bagitMetadataObjects =
                 fileProcessor
-                  .createMetadataFiles(fileInfo, metadataFileInfo, parsedUri, potentialCite, treName, department, series)
+                  .createBagitMetadataObjects(fileInfo, metadataFileInfo, parsedUri, potentialCite, treName, department, series)
 
               bagitMetadataObjects should equal(expectedBagitMetadataObjects)
             }

@@ -55,7 +55,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           treInput.parameters.skipSeriesLookup
         )
         fileInfoWithUpdatedChecksum = fileInfo.copy(checksum = treMetadata.parameters.TDR.`Document-Checksum-sha256`)
-        bagitMetadata = fileProcessor.createMetadataFiles(
+        bagitMetadata = fileProcessor.createBagitMetadataObjects(
           fileInfoWithUpdatedChecksum,
           metadataFileInfo,
           parsedUri,

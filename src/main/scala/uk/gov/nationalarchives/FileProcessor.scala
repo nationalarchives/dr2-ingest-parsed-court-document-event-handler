@@ -63,7 +63,7 @@ class FileProcessor(
     } yield parsedJson
   }
 
-  def createMetadataFiles(
+  def createBagitMetadataObjects(
       fileInfo: FileInfo,
       metadataFileInfo: FileInfo,
       parsedUri: Option[ParsedUri],
@@ -119,7 +119,7 @@ class FileProcessor(
       series: Option[String]
   ): IO[String] = {
     for {
-      metadataChecksum <- createAndUploadMetadata(bagitMetadata)
+      metadataChecksum <- createMetadataJson(bagitMetadata)
       bagitString = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
       bagitTxtChecksum <- uploadAsFile(bagitString, "bagit.txt")
       manifestString =
@@ -199,7 +199,7 @@ class FileProcessor(
       .map(checksumToString)
   }
 
-  private def createAndUploadMetadata(metadata: List[BagitMetadataObject]): IO[String] = {
+  private def createMetadataJson(metadata: List[BagitMetadataObject]): IO[String] = {
     Stream
       .emit[IO, List[BagitMetadataObject]](metadata)
       .through(_.map(_.asJson.printWith(Printer.noSpaces)))
