@@ -54,8 +54,9 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           parsedUri.flatMap(_.potentialCourt),
           treInput.parameters.skipSeriesLookup
         )
-        _ <- fileProcessor.createMetadataFiles(
-          fileInfo.copy(checksum = treMetadata.parameters.TDR.`Document-Checksum-sha256`),
+        fileInfoWithUpdatedChecksum = fileInfo.copy(checksum = treMetadata.parameters.TDR.`Document-Checksum-sha256`)
+        bagitMetadata = fileProcessor.createMetadataFiles(
+          fileInfoWithUpdatedChecksum,
           metadataFileInfo,
           parsedUri,
           potentialCite,
@@ -63,6 +64,14 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           output.department,
           output.series
         )
+        _ <- fileProcessor.createBagitFiles(
+          bagitMetadata,
+          fileInfoWithUpdatedChecksum,
+          metadataFileInfo,
+          output.department,
+          output.series
+        )
+
         _ <- s3.copy(outputBucket, fileInfo.id.toString, outputBucket, s"$batchRef/data/${fileInfo.id}")
         _ <- s3
           .copy(outputBucket, metadataFileInfo.id.toString, outputBucket, s"$batchRef/data/${metadataFileInfo.id}")

@@ -295,9 +295,46 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
   forAll(citeTable) { (potentialCite, idFields) =>
     {
       forAll(treNameTable) { (treName, treFileName, expectedFolderTitle, expectedAssetTitle) =>
+        forAll(urlDepartmentAndSeriesTable) { (department, series, _, parsedUri, expectedFolderName, titleExpected) =>
+          "createMetadataFiles" should s"generate the correct bagit Metadata with $expectedFolderTitle, $expectedAssetTitle and $idFields" +
+            s"for $department, $series, $parsedUri and TRE name $treName" in {
+              val fileId = UUID.randomUUID()
+              val metadataId = UUID.randomUUID()
+              val folderId = uuids.head
+              val assetId = uuids.last
+              val fileName = treFileName.split("\\.").dropRight(1).mkString(".")
+              val folderTitle = if (titleExpected) Option(expectedFolderTitle) else None
+              val folder =
+                BagitFolderMetadataObject(folderId, None, folderTitle, expectedFolderName, idFields)
+              val asset = BagitAssetMetadataObject(assetId, Option(folderId), expectedAssetTitle, expectedAssetTitle)
+              val files = List(
+                BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, treFileName, 1),
+                BagitFileMetadataObject(metadataId, Option(assetId), "", 2, "metadataFileName.txt", 2)
+              )
+              val expectedBagitMetadataObjects: List[BagitMetadataObject] = List(folder, asset) ++ files
+
+              val fileProcessor =
+                new FileProcessor("download", "upload", "ref", mock[DAS3Client[IO]], UUIDGenerator().uuidGenerator)
+              val fileInfo = FileInfo(fileId, 1, treFileName, "fileChecksum")
+              val metadataFileInfo = FileInfo(metadataId, 2, "metadataFileName.txt", "metadataChecksum")
+
+              val bagitMetadataObjects =
+                fileProcessor
+                  .createMetadataFiles(fileInfo, metadataFileInfo, parsedUri, potentialCite, treName, department, series)
+
+              bagitMetadataObjects should equal(expectedBagitMetadataObjects)
+            }
+        }
+      }
+    }
+  }
+
+  forAll(citeTable) { (_, idFields) =>
+    {
+      forAll(treNameTable) { (treName, treFileName, expectedFolderTitle, expectedAssetTitle) =>
         forAll(urlDepartmentAndSeriesTable) {
           (department, series, includeBagInfo, parsedUri, expectedFolderName, titleExpected) =>
-            "createMetadataFiles" should s"upload the correct bagit files with $expectedFolderTitle, $expectedAssetTitle and $idFields" +
+            "createBagitFiles" should s"upload the correct bagit files with $expectedFolderTitle, $expectedAssetTitle and $idFields" +
               s"for $department, $series, $parsedUri and TRE name $treName" in {
                 val fileId = UUID.randomUUID()
                 val metadataId = UUID.randomUUID()
@@ -385,7 +422,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
                 val tagManifestChecksumResult =
                   fileProcessor
-                    .createMetadataFiles(fileInfo, metadataFileInfo, parsedUri, potentialCite, treName, department, series)
+                    .createBagitFiles(metadataJsonList, fileInfo, metadataFileInfo, department, series)
                     .unsafeRunSync()
 
                 tagManifestChecksumResult should equal(tagManifestChecksum)
@@ -395,7 +432,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     }
   }
 
-  "createMetadataFiles" should "throw an error if there is an error uploading to s3" in {
+  "createBagitFiles" should "throw an error if there is an error uploading to s3" in {
     val s3 = mock[DAS3Client[IO]]
 
     when(s3.upload(any[String], any[String], any[Long], any[Publisher[ByteBuffer]])) thenThrow new RuntimeException(
@@ -405,16 +442,22 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
     val fileInfo = FileInfo(UUID.randomUUID(), 1, "fileName", "fileChecksum")
     val metadataFileInfo = FileInfo(UUID.randomUUID(), 2, "metadataFileName", "metadataChecksum")
-    val cite = "TEST-CITE"
 
     val ex = intercept[Exception] {
       fileProcessor
-        .createMetadataFiles(
+        .createBagitFiles(
+          List(
+            BagitFileMetadataObject(
+              UUID.randomUUID(),
+              Option(UUID.fromString("49e4a726-6297-4f8e-8867-fb50bd5acd86")),
+              "",
+              2,
+              "metadataFileName.txt",
+              2
+            )
+          ),
           fileInfo,
           metadataFileInfo,
-          Option(ParsedUri(None, "")),
-          Option(cite),
-          Option("Test title"),
           Option("department"),
           Option("series")
         )
@@ -422,4 +465,5 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     }
     ex.getMessage should equal("Upload failed")
   }
+
 }

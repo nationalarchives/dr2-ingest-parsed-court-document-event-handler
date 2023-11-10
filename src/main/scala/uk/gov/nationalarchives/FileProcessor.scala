@@ -71,7 +71,7 @@ class FileProcessor(
       judgmentName: Option[String],
       department: Option[String],
       series: Option[String]
-  ): IO[String] = {
+  ): List[BagitMetadataObject] = {
     val potentialCourtFromUri = parsedUri.flatMap(_.potentialCourt)
     val (folderName, folderTitle) = if (department.flatMap(_ => series).isEmpty && potentialCourtFromUri.isDefined) {
       ("Court Documents (court not matched)", None)
@@ -108,10 +108,19 @@ class FileProcessor(
       metadataFileInfo.fileName,
       metadataFileInfo.fileSize
     )
-    val metadata = List(folderMetadataObject, assetMetadataObject, fileRowMetadataObject, fileMetadataObject)
-    val bagitString = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
+    List(folderMetadataObject, assetMetadataObject, fileRowMetadataObject, fileMetadataObject)
+  }
+
+  def createBagitFiles(
+      bagitMetadata: List[BagitMetadataObject],
+      fileInfo: FileInfo,
+      metadataFileInfo: FileInfo,
+      department: Option[String],
+      series: Option[String]
+  ): IO[String] = {
     for {
-      metadataChecksum <- createAndUploadMetadata(metadata)
+      metadataChecksum <- createAndUploadMetadata(bagitMetadata)
+      bagitString = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
       bagitTxtChecksum <- uploadAsFile(bagitString, "bagit.txt")
       manifestString =
         s"${fileInfo.checksum} data/${fileInfo.id}\n${metadataFileInfo.checksum} data/${metadataFileInfo.id}"
