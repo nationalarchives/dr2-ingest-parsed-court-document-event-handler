@@ -46,6 +46,8 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         fileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$batchRef/${payload.filename}"))(
           new RuntimeException(s"Document not found for file belonging to $batchRef")
         )
+
+        _ <- IO.raiseWhen(fileInfo.fileSize == 0)(new Exception(s"File id '${fileInfo.id}' size is 0"))
         output <- seriesMapper.createOutput(
           config.outputBucket,
           batchRef,

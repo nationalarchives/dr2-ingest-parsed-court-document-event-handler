@@ -167,9 +167,7 @@ class FileProcessor(
                     tarEntry.getName -> FileInfo(id, tarEntry.getSize, tarEntry.getName.split("/").last, checksum)
                   }
               )
-            } else {
-              Stream.empty
-            }
+            } else Stream.empty
           } ++
           unarchiveAndUploadToS3(tarInputStream)
       }
