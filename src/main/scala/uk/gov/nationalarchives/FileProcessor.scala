@@ -48,8 +48,8 @@ class FileProcessor(
 
   def readJsonFromPackage(metadataId: UUID): IO[TREMetadata] = {
     for {
-      s3Stream <- s3.download(uploadBucket, metadataId.toString)
-      contentString <- s3Stream
+      s3Publisher <- s3.download(uploadBucket, metadataId.toString)
+      contentString <- s3Publisher
         .toStreamBuffered[IO](chunkSize)
         .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
         .through(extractMetadataFromJson)
@@ -229,9 +229,7 @@ class FileProcessor(
       .getOrElse(tagManifestMap)
       .toSeq
       .sortBy(_._1)
-      .map { case (file, checksum) =>
-        s"$checksum $file"
-      }
+      .map { case (file, checksum) => s"$checksum $file" }
       .mkString("\n")
     uploadAsFile(tagManifest, "tagmanifest-sha256.txt")
   }
