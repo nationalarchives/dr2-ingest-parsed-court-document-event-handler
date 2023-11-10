@@ -314,6 +314,20 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
     deleteObjectsEvents.head.getRequest.getBodyAsString should equal(expectedDeleteRequestXml)
   }
 
+  "the lambda" should "error if the uri contains '/press-summary' but file name does not contain 'Press Summary of'" in {
+    val metadataJson: String =
+      s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde", "Source-Organization": "test-organisation",
+         | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
+         |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
+         |"PARSER":{"cite":"cite","uri":"https://example.com/id/cite/press-summary/3/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
+
+    stubAWSRequests(inputBucket, metadataJsonOpt = Option(metadataJson))
+    val ex = intercept[Exception] {
+      IngestParserTest().handleRequest(event(), null)
+    }
+    ex.getMessage should equal("URI contains '/press-summary' but file does not start with 'Press Summary of '")
+  }
+
   "the lambda" should "error if the input json is invalid" in {
     val eventWithInvalidJson = createEvent("{}")
     val ex = intercept[Exception] {
