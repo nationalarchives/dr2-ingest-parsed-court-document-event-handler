@@ -378,43 +378,14 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
                                            tagManifest
                                          }).mkString("\n")
 
-                def mockUpload(
-                    fileName: String,
-                    fileString: String,
-                    checksum: String
-                ): ArgumentMatcher[Publisher[ByteBuffer]] = {
-                  val publisherMatcher = new ArgumentMatcher[Publisher[ByteBuffer]] {
-                    override def matches(argument: Publisher[ByteBuffer]): Boolean = {
-                      val arg = argument
-                        .toStreamBuffered[IO](1024)
-                        .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
-                        .through(text.utf8.decode)
-                        .compile
-                        .string
-                        .unsafeRunSync()
-                      arg == fileString
-                    }
-                  }
-                  when(
-                    s3.upload(
-                      ArgumentMatchers.eq("upload"),
-                      ArgumentMatchers.eq(s"ref/$fileName"),
-                      any[Long],
-                      argThat(publisherMatcher)
-                    )
-                  )
-                    .thenReturn(IO(completedUpload(Option(checksum))))
-                  publisherMatcher
-                }
-
-                mockUpload("metadata.json", metadataJsonString, metadataChecksum)
-                mockUpload("bagit.txt", bagitTxtContent, bagitChecksum)
-                mockUpload("manifest-sha256.txt", manifestString, manifestChecksum)
+                mockUpload(s3, "metadata.json", metadataJsonString, metadataChecksum)
+                mockUpload(s3, "bagit.txt", bagitTxtContent, bagitChecksum)
+                mockUpload(s3, "manifest-sha256.txt", manifestString, manifestChecksum)
                 if (includeBagInfo) {
                   val bagInfoString = s"Department: ${department.get}\nSeries: ${series.get}"
-                  mockUpload("bag-info.txt", bagInfoString, bagInfoChecksum)
+                  mockUpload(s3, "bag-info.txt", bagInfoString, bagInfoChecksum)
                 }
-                mockUpload("tagmanifest-sha256.txt", tagManifestString, tagManifestChecksum)
+                mockUpload(s3, "tagmanifest-sha256.txt", tagManifestString, tagManifestChecksum)
 
                 val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
                 val fileInfo = FileInfo(fileId, 1, treFileName, "fileChecksum")
@@ -466,4 +437,35 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     ex.getMessage should equal("Upload failed")
   }
 
+  private def mockUpload(
+      s3: DAS3Client[IO],
+      fileName: String,
+      fileString: String,
+      checksum: String
+  ): ArgumentMatcher[Publisher[ByteBuffer]] = {
+    val publisherMatcher =
+      new ArgumentMatcher[Publisher[ByteBuffer]] {
+        override def matches(argument: Publisher[ByteBuffer]): Boolean = {
+          val arg = argument
+            .toStreamBuffered[IO](1024)
+            .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
+            .through(text.utf8.decode)
+            .compile
+            .string
+            .unsafeRunSync()
+          arg == fileString
+        }
+      }
+
+    when(
+      s3.upload(
+        ArgumentMatchers.eq("upload"),
+        ArgumentMatchers.eq(s"ref/$fileName"),
+        any[Long],
+        argThat(publisherMatcher)
+      )
+    )
+      .thenReturn(IO(completedUpload(Option(checksum))))
+    publisherMatcher
+  }
 }
