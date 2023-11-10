@@ -18,6 +18,7 @@ import reactor.core.publisher.Flux
 import software.amazon.awssdk.services.s3.model.PutObjectResponse
 import software.amazon.awssdk.transfer.s3.model.CompletedUpload
 import uk.gov.nationalarchives.FileProcessor._
+import uk.gov.nationalarchives.UriProcessor.ParsedUri
 
 import java.nio.ByteBuffer
 import java.util.{Base64, HexFormat, UUID}
@@ -425,41 +426,4 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     }
     ex.getMessage should equal("Upload failed")
   }
-
-  val uriTable: TableFor2[Option[String], Option[ParsedUri]] = Table(
-    ("uri", "expectedCiteAndUri"),
-    (Option("http://example.com/id/abcd/2023/1"), Option(ParsedUri(Option("abcd"), "http://example.com/id/abcd/2023/1"))),
-    (
-      Option("http://example.com/id/abcd/efgh/2024/123"),
-      Option(ParsedUri(Option("abcd"), "http://example.com/id/abcd/efgh/2024/123"))
-    ),
-    (
-      Option("http://example.com/id/ijkl/2025/1/doc-type/3"),
-      Option(ParsedUri(Option("ijkl"), "http://example.com/id/ijkl/2025/1"))
-    ),
-    (
-      Option("http://example.com/id/mnop/qrst/2026/567/different-doc-type/8"),
-      Option(ParsedUri(Option("mnop"), "http://example.com/id/mnop/qrst/2026/567"))
-    ),
-    (Option("http://example.com/id/abcd/efgh/2024/"), Option(ParsedUri(Option("abcd"), "http://example.com/id/abcd/efgh/2024/"))),
-    (None, None)
-  )
-
-  forAll(uriTable) { (uri, expectedCiteAndUri) =>
-    "parseUri" should s"parse the uri $uri and return the cite and uri without doc type" in {
-      val fileProcessor = new FileProcessor("download", "upload", "ref", mock[DAS3Client[IO]], UUIDGenerator().uuidGenerator)
-      fileProcessor.parseUri(uri).unsafeRunSync() should equal(expectedCiteAndUri)
-    }
-  }
-
-  "parseUri" should "return an error if the url cannot be trimmed because of a missing year" in {
-    val fileProcessor = new FileProcessor("download", "upload", "ref", mock[DAS3Client[IO]], UUIDGenerator().uuidGenerator)
-    val ex = intercept[RuntimeException] {
-      fileProcessor.parseUri(Option("http://example.com/id/mnop/qrst")).unsafeRunSync()
-    }
-    ex.getMessage should equal(
-      "Failure trying to trim off the doc type for http://example.com/id/mnop/qrst. Is the year missing?"
-    )
-  }
-
 }
