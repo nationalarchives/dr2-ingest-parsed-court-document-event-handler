@@ -329,9 +329,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
   }
 
   "the lambda" should "error if the input json is invalid" in {
-    val event = createEvent("{}")
+    val eventWithInvalidJson = createEvent("{}")
     val ex = intercept[Exception] {
-      IngestParserTest().handleRequest(event, null)
+      IngestParserTest().handleRequest(eventWithInvalidJson, null)
     }
     ex.getMessage should equal("DecodingFailure at .parameters: Missing required field")
   }
@@ -367,6 +367,15 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
     ex.getMessage should equal(
       """DecodingFailure at .parameters.TDR.Document-Checksum-sha256: Got value 'null' with wrong type, expecting string""".stripMargin
     )
+  }
+
+  "the lambda" should "error if the tar file contains a zero-byte file" in {
+    val zeroBytesTarFileName = "zero-byte-test.tar.gz"
+    stubAWSRequests(inputBucket, tarFileName = zeroBytesTarFileName)
+    val ex = intercept[Exception] {
+      IngestParserTest().handleRequest(event(zeroBytesTarFileName), null)
+    }
+    ex.getMessage should equal("File id 'c7e6b27f-5778-4da8-9b83-1b64bbccbd03' size is 0")
   }
 
   "the lambda" should "error if S3 is unavailable" in {
