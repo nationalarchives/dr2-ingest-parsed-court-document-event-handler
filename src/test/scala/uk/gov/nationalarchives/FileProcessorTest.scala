@@ -258,8 +258,8 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
   val department: Option[String] = Option("Department")
   val series: Option[String] = Option("Series")
   val trimmedUri: String = "http://example.com/id/abcde"
-  val withoutCite: Option[ParsedUri] = Option(ParsedUri(None, trimmedUri))
-  val withCite: Option[ParsedUri] = Option(ParsedUri(Option("TEST-CITE"), trimmedUri))
+  val withoutCourt: Option[ParsedUri] = Option(ParsedUri(None, trimmedUri))
+  val withCourt: Option[ParsedUri] = Option(ParsedUri(Option("TEST-COURT"), trimmedUri))
   val notMatched = "Court Documents (court not matched)"
   val unknown = "Court Documents (court unknown)"
 
@@ -271,14 +271,14 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
   val urlDepartmentAndSeriesTable: TableFor6[Option[String], Option[String], Boolean, Option[ParsedUri], String, Boolean] = Table(
     ("department", "series", "includeBagInfo", "url", "expectedFolderName", "titleExpected"),
-    (department, series, true, withCite, trimmedUri, true),
-    (department, None, false, withCite, notMatched, false),
-    (None, series, false, withCite, notMatched, false),
-    (None, None, false, withCite, notMatched, false),
-    (department, series, true, withoutCite, unknown, false),
-    (department, None, false, withoutCite, unknown, false),
-    (None, series, false, withoutCite, unknown, false),
-    (None, None, false, withoutCite, unknown, false),
+    (department, series, true, withCourt, trimmedUri, true),
+    (department, None, false, withCourt, notMatched, false),
+    (None, series, false, withCourt, notMatched, false),
+    (None, None, false, withCourt, notMatched, false),
+    (department, series, true, withoutCourt, unknown, false),
+    (department, None, false, withoutCourt, unknown, false),
+    (None, series, false, withoutCourt, unknown, false),
+    (None, None, false, withoutCourt, unknown, false),
     (department, series, true, None, unknown, false),
     (department, None, false, None, unknown, false),
     (None, series, false, None, unknown, false),

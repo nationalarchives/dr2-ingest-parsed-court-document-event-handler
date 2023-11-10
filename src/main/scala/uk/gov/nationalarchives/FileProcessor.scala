@@ -72,10 +72,10 @@ class FileProcessor(
       department: Option[String],
       series: Option[String]
   ): IO[String] = {
-    val potentialCiteFromUri = parsedUri.flatMap(_.potentialCite)
-    val (folderName, folderTitle) = if (department.flatMap(_ => series).isEmpty && potentialCiteFromUri.isDefined) {
+    val potentialCourtFromUri = parsedUri.flatMap(_.potentialCourt)
+    val (folderName, folderTitle) = if (department.flatMap(_ => series).isEmpty && potentialCourtFromUri.isDefined) {
       ("Court Documents (court not matched)", None)
-    } else if (potentialCiteFromUri.isEmpty) {
+    } else if (potentialCourtFromUri.isEmpty) {
       ("Court Documents (court unknown)", None)
     } else {
       (parsedUri.get.uriWithoutDocType, Option(judgmentName.map(_.stripPrefix("Press Summary of ")).getOrElse("")))

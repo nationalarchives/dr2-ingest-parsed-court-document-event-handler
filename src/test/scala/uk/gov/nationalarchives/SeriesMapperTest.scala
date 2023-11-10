@@ -31,40 +31,31 @@ class SeriesMapperTest extends AnyFlatSpec with MockitoSugar with TableDrivenPro
     "createOutput" should s"return $series for court $court" in {
       val seriesMapper = SeriesMapper()
       val output =
-        seriesMapper.createOutput("upload", "batch", Option(s"2023 $court SUFFIX"), skipSeriesLookup = false).unsafeRunSync()
+        seriesMapper.createOutput("upload", "batch", Option(court), skipSeriesLookup = false).unsafeRunSync()
       output.department.get should equal(series.split(" ").head)
       output.series.get should equal(series)
     }
   }
 
-  "createOutput" should "return an error if more than one series is found" in {
-    val seriesMapper = SeriesMapper()
-    val ex = intercept[RuntimeException] {
-      seriesMapper.createOutput("upload", "batch", Option(s"2023 EWFC UKEAT"), skipSeriesLookup = false).unsafeRunSync()
-    }
-    val expectedMessage = s"2 entries found when looking up series for cite 2023 EWFC UKEAT and batchId batch"
-    ex.getMessage should equal(expectedMessage)
-  }
-
-  "createOutput" should "return an error if a cite does not yield a series and skipSeriesLookup is set to false" in {
+  "createOutput" should "return an error if a court does not yield a series and 'skipSeriesLookup' is set to false" in {
     val seriesMapper = SeriesMapper()
     val ex = intercept[Exception] {
-      seriesMapper.createOutput("upload", "batch", Option(s"2023 PREFIX SUFFIX"), skipSeriesLookup = false).unsafeRunSync()
+      seriesMapper.createOutput("upload", "batch", Option("invalidCourt"), skipSeriesLookup = false).unsafeRunSync()
     }
-    val expectedMessage = s"Cannot find series and department for cite"
+    val expectedMessage = s"Cannot find series and department for court"
     ex.getMessage should equal(expectedMessage)
   }
 
-  "createOutput" should "return an empty department and series if a cite does not yield a series but 'skipSeriesLookup' is set to true" in {
+  "createOutput" should "return an empty department and series if a court does not yield a series but 'skipSeriesLookup' is set to true" in {
     val seriesMapper = SeriesMapper()
     val output =
-      seriesMapper.createOutput("upload", "batch", Option(s"2023 PREFIX SUFFIX"), skipSeriesLookup = true).unsafeRunSync()
+      seriesMapper.createOutput("upload", "batch", Option("invalidCourt"), skipSeriesLookup = true).unsafeRunSync()
 
     output.series should equal(None)
     output.department should equal(None)
   }
 
-  "createOutput" should "return an empty department and series if the cite is missing" in {
+  "createOutput" should "return an empty department and series if the court is missing" in {
     val seriesMapper = SeriesMapper()
     val output = seriesMapper.createOutput("upload", "batch", None, skipSeriesLookup = false).unsafeRunSync()
 

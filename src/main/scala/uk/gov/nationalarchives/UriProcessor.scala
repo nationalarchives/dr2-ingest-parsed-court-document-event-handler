@@ -13,22 +13,22 @@ class UriProcessor(potentialUri: Option[String]) {
     else IO.unit
   }
 
-  def getCiteAndUriWithoutDocType: IO[Option[ParsedUri]] = {
+  def getCourtAndUriWithoutDocType: IO[Option[ParsedUri]] = {
     potentialUri.map { uri =>
-      val citeRegex = "^.*/id/([a-z]*)/".r
+      val courtRegex = "^.*/id/([a-z]*)/".r
       val uriWithoutDocTypeRegex = """(^.*/\d{4}/\d*)""".r
-      val potentialCite = citeRegex.findFirstMatchIn(uri).map(_.group(1))
+      val potentialCourt = courtRegex.findFirstMatchIn(uri).map(_.group(1))
       val potentialUriWithoutDocType = uriWithoutDocTypeRegex.findFirstMatchIn(uri).map(_.group(1))
       IO.fromOption(potentialUriWithoutDocType)(
         new RuntimeException(s"Failure trying to trim off the doc type for $uri. Is the year missing?")
       ).map { uriWithoutDocType =>
-        ParsedUri(potentialCite, uriWithoutDocType)
+        ParsedUri(potentialCourt, uriWithoutDocType)
       }
     }.sequence
   }
 }
 
 object UriProcessor {
-  case class ParsedUri(potentialCite: Option[String], uriWithoutDocType: String)
+  case class ParsedUri(potentialCourt: Option[String], uriWithoutDocType: String)
 
 }

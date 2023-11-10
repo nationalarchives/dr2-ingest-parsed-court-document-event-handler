@@ -92,7 +92,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
 
     override val s3: DAS3Client[IO] = DAS3Client[IO](s3AsyncClient)
     override val sfn: DASFNClient[IO] = new DASFNClient(sfnAsyncClient)
-    override val seriesMapper: SeriesMapper = new SeriesMapper(Set(Court("CITE", "TEST", "TEST SERIES")))
+    override val seriesMapper: SeriesMapper = new SeriesMapper(Set(Court("COURT", "TEST", "TEST SERIES")))
     val uuidsIterator: Iterator[String] = uuidsAndChecksum.map(_._1).iterator
 
     override val randomUuidGenerator: () => UUID = () => UUID.fromString(uuidsIterator.next())
@@ -136,7 +136,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
       s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde", "Source-Organization": "test-organisation",
          | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
          |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
-         |"PARSER":{"cite":"cite","uri":"https://example.com/id/cite/2023/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
+         |"PARSER":{"cite":"cite","uri":"https://example.com/id/court/2023/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
     )
 
     metadataFilesAndChecksums.foreach { case (file, checksum) =>
@@ -211,7 +211,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
         s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde", "Source-Organization": "test-organisation",
            | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
            |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
-           |"PARSER":{"cite":${potentialCite.orNull},"uri":"https://example.com/id/cite/2023/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
+           |"PARSER":{"cite":${potentialCite.orNull},"uri":"https://example.com/id/court/2023/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
       stubAWSRequests(inputBucket, metadataJsonOpt = Option(metadataJson))
       IngestParserTest().handleRequest(event(), null)
       val serveEvents = s3Server.getAllServeEvents.asScala
@@ -242,7 +242,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
       )
 
       val expectedFolderMetadata =
-        BagitFolderMetadataObject(folderId, None, Option("test"), "https://example.com/id/cite/2023/", idFields)
+        BagitFolderMetadataObject(folderId, None, Option("test"), "https://example.com/id/court/2023/", idFields)
       val metadataList: List[BagitMetadataObject] =
         List(expectedFolderMetadata, expectedAssetMetadata) ++ expectedFileMetadata
       val expectedMetadata = metadataList.asJson.printWith(Printer.noSpaces)
@@ -276,9 +276,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
   val citeAndUri: TableFor4[Option[String], Option[String], Option[String], Option[String]] = Table(
     ("cite", "uri", "expectedSeries", "expectedDepartment"),
     (None, None, None, None),
-    (None, Option(""""https://example.com/id/cite/2023/""""), Option("TEST SERIES"), Option("TEST")),
+    (None, Option(""""https://example.com/id/court/2023/""""), Option("TEST SERIES"), Option("TEST")),
     (Option(""""cite""""), None, None, None),
-    (Option(""""cite""""), Option(""""https://example.com/id/cite/2023/""""), Option("TEST SERIES"), Option("TEST"))
+    (Option(""""cite""""), Option(""""https://example.com/id/court/2023/""""), Option("TEST SERIES"), Option("TEST"))
   )
 
   forAll(citeAndUri) { (cite, uri, expectedSeries, expectedDepartment) =>
@@ -319,7 +319,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
       s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde", "Source-Organization": "test-organisation",
          | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
          |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
-         |"PARSER":{"cite":"cite","uri":"https://example.com/id/cite/press-summary/3/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
+         |"PARSER":{"cite":"cite","uri":"https://example.com/id/court/press-summary/3/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
 
     stubAWSRequests(inputBucket, metadataJsonOpt = Option(metadataJson))
     val ex = intercept[Exception] {

@@ -39,7 +39,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         uriProcessor = new UriProcessor(potentialUri)
         _ <- uriProcessor.verifyFileNameStartsWithPressSummaryOfIfInUri(potentialFileName)
 
-        parsedUri <- uriProcessor.getCiteAndUriWithoutDocType
+        parsedUri <- uriProcessor.getCourtAndUriWithoutDocType
         payload = treMetadata.parameters.TRE.payload
         potentialCite = treMetadata.parameters.PARSER.cite
 
@@ -51,7 +51,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         output <- seriesMapper.createOutput(
           config.outputBucket,
           batchRef,
-          parsedUri.flatMap(_.potentialCite),
+          parsedUri.flatMap(_.potentialCourt),
           treInput.parameters.skipSeriesLookup
         )
         _ <- fileProcessor.createMetadataFiles(
