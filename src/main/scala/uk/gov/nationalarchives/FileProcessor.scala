@@ -13,13 +13,15 @@ import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto.{deriveConfiguredDecoder, deriveConfiguredEncoder}
 import io.circe.parser.decode
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder, Json, Printer}
+import io.circe.{Decoder, Encoder, HCursor, Json, Printer}
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import uk.gov.nationalarchives.FileProcessor._
+import uk.gov.nationalarchives.UriProcessor.ParsedUri
 
 import java.io.{BufferedInputStream, InputStream}
 import java.nio.ByteBuffer
+import java.time.OffsetDateTime
 import java.util.{Base64, UUID}
 
 class FileProcessor(
@@ -46,32 +48,22 @@ class FileProcessor(
 
   def readJsonFromPackage(metadataId: UUID): IO[TREMetadata] = {
     for {
-      s3Stream <- s3.download(uploadBucket, metadataId.toString)
-      contentString <- s3Stream
+      s3Publisher <- s3.download(uploadBucket, metadataId.toString)
+      contentString <- s3Publisher
         .toStreamBuffered[IO](chunkSize)
         .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
         .through(extractMetadataFromJson)
         .compile
         .toList
-      parsedJson <- IO.fromOption(contentString.headOption)(new RuntimeException("Error parsing json"))
+      parsedJson <- IO.fromOption(contentString.headOption)(
+        new RuntimeException(
+          "Error parsing metadata.json.\nPlease check that the JSON is valid and that all required fields are present"
+        )
+      )
     } yield parsedJson
   }
 
-  def parseUri(potentialUri: Option[String]): IO[Option[ParsedUri]] = {
-    potentialUri.map { uri =>
-      val citeRegex = "^.*/id/([a-z]*)/".r
-      val uriWithoutDocTypeRegex = """(^.*/\d{4}/\d*)""".r
-      val potentialCite = citeRegex.findFirstMatchIn(uri).map(_.group(1))
-      val potentialUriWithoutDocType = uriWithoutDocTypeRegex.findFirstMatchIn(uri).map(_.group(1))
-      IO.fromOption(potentialUriWithoutDocType)(
-        new RuntimeException(s"Failure trying to trim off the doc type for $uri. Is the year missing?")
-      ).map { uriWithoutDocType =>
-        ParsedUri(potentialCite, uriWithoutDocType)
-      }
-    }.sequence
-  }
-
-  def createMetadataFiles(
+  def createBagitMetadataObjects(
       fileInfo: FileInfo,
       metadataFileInfo: FileInfo,
       parsedUri: Option[ParsedUri],
@@ -79,12 +71,12 @@ class FileProcessor(
       judgmentName: Option[String],
       department: Option[String],
       series: Option[String]
-  ): IO[String] = {
-    val potentialCiteFromUri = parsedUri.flatMap(_.potentialCite)
+  ): List[BagitMetadataObject] = {
+    val potentialCourtFromUri = parsedUri.flatMap(_.potentialCourt)
     val (folderName, folderTitle, uriIdField) =
-      if (department.flatMap(_ => series).isEmpty && potentialCiteFromUri.isDefined)
+      if (department.flatMap(_ => series).isEmpty && potentialCourtFromUri.isDefined)
         ("Court Documents (court not matched)", None, Nil)
-      else if (potentialCiteFromUri.isEmpty) ("Court Documents (court unknown)", None, Nil)
+      else if (potentialCourtFromUri.isEmpty) ("Court Documents (court unknown)", None, Nil)
       else
         (
           parsedUri.get.uriWithoutDocType,
@@ -119,10 +111,19 @@ class FileProcessor(
       metadataFileInfo.fileName,
       metadataFileInfo.fileSize
     )
-    val metadata = List(folderMetadataObject, assetMetadataObject, fileRowMetadataObject, fileMetadataObject)
-    val bagitString = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
+    List(folderMetadataObject, assetMetadataObject, fileRowMetadataObject, fileMetadataObject)
+  }
+
+  def createBagitFiles(
+      bagitMetadata: List[BagitMetadataObject],
+      fileInfo: FileInfo,
+      metadataFileInfo: FileInfo,
+      department: Option[String],
+      series: Option[String]
+  ): IO[String] = {
     for {
-      metadataChecksum <- createAndUploadMetadata(metadata)
+      metadataChecksum <- createMetadataJson(bagitMetadata)
+      bagitString = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
       bagitTxtChecksum <- uploadAsFile(bagitString, "bagit.txt")
       manifestString =
         s"${fileInfo.checksum} data/${fileInfo.id}\n${metadataFileInfo.checksum} data/${metadataFileInfo.id}"
@@ -175,9 +176,7 @@ class FileProcessor(
                     tarEntry.getName -> FileInfo(id, tarEntry.getSize, tarEntry.getName.split("/").last, checksum)
                   }
               )
-            } else {
-              Stream.empty
-            }
+            } else Stream.empty
           } ++
           unarchiveAndUploadToS3(tarInputStream)
       }
@@ -203,7 +202,7 @@ class FileProcessor(
       .map(checksumToString)
   }
 
-  private def createAndUploadMetadata(metadata: List[BagitMetadataObject]): IO[String] = {
+  private def createMetadataJson(metadata: List[BagitMetadataObject]): IO[String] = {
     Stream
       .emit[IO, List[BagitMetadataObject]](metadata)
       .through(_.map(_.asJson.printWith(Printer.noSpaces)))
@@ -233,9 +232,7 @@ class FileProcessor(
       .getOrElse(tagManifestMap)
       .toSeq
       .sortBy(_._1)
-      .map { case (file, checksum) =>
-        s"$checksum $file"
-      }
+      .map { case (file, checksum) => s"$checksum $file" }
       .mkString("\n")
     uploadAsFile(tagManifest, "tagmanifest-sha256.txt")
   }
@@ -245,6 +242,14 @@ object FileProcessor {
   private val chunkSize: Int = 1024 * 64
   implicit val customConfig: Configuration = Configuration.default.withDefaults
   implicit val parserDecoder: Decoder[Parser] = deriveConfiguredDecoder
+  implicit val inputParametersDecoder: Decoder[TREInputParameters] = (c: HCursor) =>
+    for {
+      status <- c.downField("status").as[String]
+      reference <- c.downField("reference").as[String]
+      s3Bucket <- c.downField("s3Bucket").as[String]
+      s3Key <- c.downField("s3Key").as[String]
+      skipSeriesLookup <- c.getOrElse("skipSeriesLookup")(false)
+    } yield TREInputParameters(status, reference, skipSeriesLookup, s3Bucket, s3Key)
   implicit val bagitMetadataEncoder: Encoder[BagitMetadataObject] = {
     case BagitFolderMetadataObject(id, parentId, title, name, idFields) =>
       jsonFromMetadataObject(id, parentId, title, ArchiveFolder, name).deepMerge {
@@ -329,11 +334,9 @@ object FileProcessor {
       fileSize: Long
   ) extends BagitMetadataObject
 
-  case class ParsedUri(potentialCite: Option[String], uriWithoutDocType: String)
-
   case class FileInfo(id: UUID, fileSize: Long, fileName: String, checksum: String)
 
-  case class TREInputParameters(status: String, reference: String, s3Bucket: String, s3Key: String)
+  case class TREInputParameters(status: String, reference: String, skipSeriesLookup: Boolean, s3Bucket: String, s3Key: String)
 
   case class TREInput(parameters: TREInputParameters)
 
@@ -349,9 +352,14 @@ object FileProcessor {
 
   case class Payload(filename: String)
 
-  case class TREParams(payload: Payload)
+  case class TREParams(reference: String, payload: Payload)
 
-  case class TDRParams(`Document-Checksum-sha256`: String)
+  case class TDRParams(
+      `Document-Checksum-sha256`: String,
+      `Source-Organization`: String,
+      `Internal-Sender-Identifier`: String,
+      `Consignment-Export-Datetime`: OffsetDateTime
+  )
 
   case class TREMetadataParameters(PARSER: Parser, TRE: TREParams, TDR: TDRParams)
 

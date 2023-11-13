@@ -30,32 +30,34 @@ class SeriesMapperTest extends AnyFlatSpec with MockitoSugar with TableDrivenPro
   forAll(courtToSeries) { (court, series) =>
     "createOutput" should s"return $series for court $court" in {
       val seriesMapper = SeriesMapper()
-      val output = seriesMapper.createOutput("upload", "batch", Option(s"2023 $court SUFFIX")).unsafeRunSync()
+      val output =
+        seriesMapper.createOutput("upload", "batch", Option(court), skipSeriesLookup = false).unsafeRunSync()
       output.department.get should equal(series.split(" ").head)
       output.series.get should equal(series)
     }
   }
 
-  "createOutput" should "return an error if more than one series is found" in {
+  "createOutput" should "return an error if a court does not yield a series and 'skipSeriesLookup' is set to false" in {
     val seriesMapper = SeriesMapper()
-    val ex = intercept[RuntimeException] {
-      seriesMapper.createOutput("upload", "batch", Option(s"2023 EWFC UKEAT")).unsafeRunSync()
+    val ex = intercept[Exception] {
+      seriesMapper.createOutput("upload", "batch", Option("invalidCourt"), skipSeriesLookup = false).unsafeRunSync()
     }
-    val expectedMessage = s"2 entries found when looking up series for cite 2023 EWFC UKEAT and batchId batch"
+    val expectedMessage = s"Cannot find series and department for court"
     ex.getMessage should equal(expectedMessage)
   }
 
-  "createOutput" should "return an empty series if no series are found" in {
+  "createOutput" should "return an empty department and series if a court does not yield a series but 'skipSeriesLookup' is set to true" in {
     val seriesMapper = SeriesMapper()
-    val output = seriesMapper.createOutput("upload", "batch", Option(s"2023 PREFIX SUFFIX")).unsafeRunSync()
+    val output =
+      seriesMapper.createOutput("upload", "batch", Option("invalidCourt"), skipSeriesLookup = true).unsafeRunSync()
 
-    output.series.isEmpty should equal(true)
-    output.department.isEmpty should equal(true)
+    output.series should equal(None)
+    output.department should equal(None)
   }
 
-  "createOutput" should "return an empty department and series if the cite is missing" in {
+  "createOutput" should "return an empty department and series if the court is missing" in {
     val seriesMapper = SeriesMapper()
-    val output = seriesMapper.createOutput("upload", "batch", None).unsafeRunSync()
+    val output = seriesMapper.createOutput("upload", "batch", None, skipSeriesLookup = false).unsafeRunSync()
 
     output.series should equal(None)
     output.department should equal(None)

@@ -29,28 +29,49 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         outputBucket = config.outputBucket
         fileProcessor = new FileProcessor(treInput.parameters.s3Bucket, outputBucket, batchRef, s3, randomUuidGenerator)
         fileNameToFileInfo <- fileProcessor.copyFilesFromDownloadToUploadBucket(treInput.parameters.s3Key)
-
         metadataFileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$batchRef/TRE-$batchRef-metadata.json"))(
           new RuntimeException(s"Cannot find metadata for $batchRef")
         )
+
         treMetadata <- fileProcessor.readJsonFromPackage(metadataFileInfo.id)
-        parsedUri <- fileProcessor.parseUri(treMetadata.parameters.PARSER.uri)
+        potentialUri = treMetadata.parameters.PARSER.uri
+        potentialFileName = treMetadata.parameters.PARSER.name
+        uriProcessor = new UriProcessor(potentialUri)
+        _ <- uriProcessor.verifyFileNameStartsWithPressSummaryOfIfInUri(potentialFileName)
+
+        parsedUri <- uriProcessor.getCourtAndUriWithoutDocType
         payload = treMetadata.parameters.TRE.payload
-        cite = treMetadata.parameters.PARSER.cite
+        potentialCite = treMetadata.parameters.PARSER.cite
 
         fileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$batchRef/${payload.filename}"))(
           new RuntimeException(s"Document not found for file belonging to $batchRef")
         )
-        output <- seriesMapper.createOutput(config.outputBucket, batchRef, parsedUri.flatMap(_.potentialCite))
-        _ <- fileProcessor.createMetadataFiles(
-          fileInfo.copy(checksum = treMetadata.parameters.TDR.`Document-Checksum-sha256`),
+
+        _ <- IO.raiseWhen(fileInfo.fileSize == 0)(new Exception(s"File id '${fileInfo.id}' size is 0"))
+        output <- seriesMapper.createOutput(
+          config.outputBucket,
+          batchRef,
+          parsedUri.flatMap(_.potentialCourt),
+          treInput.parameters.skipSeriesLookup
+        )
+        fileInfoWithUpdatedChecksum = fileInfo.copy(checksum = treMetadata.parameters.TDR.`Document-Checksum-sha256`)
+        bagitMetadata = fileProcessor.createBagitMetadataObjects(
+          fileInfoWithUpdatedChecksum,
           metadataFileInfo,
           parsedUri,
-          cite,
-          treMetadata.parameters.PARSER.name,
+          potentialCite,
+          potentialFileName,
           output.department,
           output.series
         )
+        _ <- fileProcessor.createBagitFiles(
+          bagitMetadata,
+          fileInfoWithUpdatedChecksum,
+          metadataFileInfo,
+          output.department,
+          output.series
+        )
+
         _ <- s3.copy(outputBucket, fileInfo.id.toString, outputBucket, s"$batchRef/data/${fileInfo.id}")
         _ <- s3
           .copy(outputBucket, metadataFileInfo.id.toString, outputBucket, s"$batchRef/data/${metadataFileInfo.id}")

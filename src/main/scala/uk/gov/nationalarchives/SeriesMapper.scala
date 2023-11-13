@@ -3,21 +3,23 @@ package uk.gov.nationalarchives
 import cats.effect._
 import uk.gov.nationalarchives.SeriesMapper._
 
-class SeriesMapper(courts: Set[Court]) {
-  def createOutput(uploadBucket: String, batchId: String, potentialCite: Option[String]): IO[Output] = {
-    potentialCite
-      .map { cite =>
-        val filteredSeries = courts.filter(court => cite.toUpperCase.contains(court.code))
-        filteredSeries.size match {
-          case size if size > 1 =>
-            IO.raiseError(
-              new RuntimeException(s"$size entries found when looking up series for cite $cite and batchId $batchId")
-            )
+class SeriesMapper(validCourts: Set[Court]) {
+  def createOutput(
+      uploadBucket: String,
+      batchId: String,
+      potentialCourt: Option[String],
+      skipSeriesLookup: Boolean
+  ): IO[Output] = {
+    potentialCourt
+      .map { court =>
+        val potentiallyFoundCourt: Option[Court] = validCourts.find(_.code == court.toUpperCase)
+        potentiallyFoundCourt match {
+          case None if skipSeriesLookup => IO(Output(batchId, uploadBucket, s"$batchId/", None, None))
+          case None                     => IO.raiseError(new Exception("Cannot find series and department for court"))
           case _ =>
-            IO {
-              val court = filteredSeries.headOption
-              Output(batchId, uploadBucket, s"$batchId/", court.map(_.dept), court.map(_.series))
-            }
+            IO(
+              Output(batchId, uploadBucket, s"$batchId/", potentiallyFoundCourt.map(_.dept), potentiallyFoundCourt.map(_.series))
+            )
         }
       }
       .getOrElse(IO(Output(batchId, uploadBucket, s"$batchId/", None, None)))
