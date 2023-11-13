@@ -295,7 +295,10 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
   forAll(citeTable) { (potentialCite, idFields) =>
     forAll(treNameTable) { (treName, treFileName, expectedFolderTitle, expectedAssetTitle) =>
       forAll(urlDepartmentAndSeriesTable) { (department, series, _, parsedUri, expectedFolderName, titleExpected) =>
-        "createBagitMetadataObjects" should s"generate the correct bagit Metadata with $expectedFolderTitle, $expectedAssetTitle and $idFields" +
+        val updatedIdFields =
+          if (potentialCite.isDefined && expectedFolderName == trimmedUri) idFields :+ IdField("URI", trimmedUri)
+          else idFields
+        "createBagitMetadataObjects" should s"generate the correct bagit Metadata with $expectedFolderTitle, $expectedAssetTitle and $updatedIdFields" +
           s"for $department, $series, $parsedUri and TRE name $treName" in {
             val fileId = UUID.randomUUID()
             val metadataId = UUID.randomUUID()
@@ -304,7 +307,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
             val fileName = treFileName.split("\\.").dropRight(1).mkString(".")
             val folderTitle = if (titleExpected) Option(expectedFolderTitle) else None
             val folder =
-              BagitFolderMetadataObject(folderId, None, folderTitle, expectedFolderName, idFields)
+              BagitFolderMetadataObject(folderId, None, folderTitle, expectedFolderName, updatedIdFields)
             val asset = BagitAssetMetadataObject(assetId, Option(folderId), expectedAssetTitle, expectedAssetTitle)
             val files = List(
               BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, treFileName, 1),
@@ -327,10 +330,13 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     }
   }
 
-  forAll(citeTable) { (_, idFields) =>
+  forAll(citeTable) { (potentialCite, idFields) =>
     forAll(treNameTable) { (treName, treFileName, expectedFolderTitle, expectedAssetTitle) =>
       forAll(urlDepartmentAndSeriesTable) { (department, series, includeBagInfo, parsedUri, expectedFolderName, titleExpected) =>
-        "createBagitFiles" should s"upload the correct bagit files with $expectedFolderTitle, $expectedAssetTitle and $idFields" +
+        val updatedIdFields =
+          if (potentialCite.isDefined && expectedFolderName == trimmedUri) idFields :+ IdField("URI", trimmedUri)
+          else idFields
+        "createBagitFiles" should s"upload the correct bagit files with $expectedFolderTitle, $expectedAssetTitle and $updatedIdFields" +
           s"for $department, $series, $parsedUri and TRE name $treName" in {
             val fileId = UUID.randomUUID()
             val metadataId = UUID.randomUUID()
@@ -340,7 +346,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
             val fileName = treFileName.split("\\.").dropRight(1).mkString(".")
             val folderTitle = if (titleExpected) Option(expectedFolderTitle) else None
             val folder =
-              BagitFolderMetadataObject(folderId, None, folderTitle, expectedFolderName, idFields)
+              BagitFolderMetadataObject(folderId, None, folderTitle, expectedFolderName, updatedIdFields)
             val asset = BagitAssetMetadataObject(assetId, Option(folderId), expectedAssetTitle, expectedAssetTitle)
             val files = List(
               BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, treFileName, 1),

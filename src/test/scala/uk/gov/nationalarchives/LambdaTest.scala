@@ -242,7 +242,13 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
       )
 
       val expectedFolderMetadata =
-        BagitFolderMetadataObject(folderId, None, Option("test"), "https://example.com/id/court/2023/", idFields)
+        BagitFolderMetadataObject(
+          folderId,
+          None,
+          Option("test"),
+          "https://example.com/id/court/2023/",
+          if (potentialCite.isDefined) idFields :+ IdField("URI", "https://example.com/id/court/2023/") else idFields
+        )
       val metadataList: List[BagitMetadataObject] =
         List(expectedFolderMetadata, expectedAssetMetadata) ++ expectedFileMetadata
       val expectedMetadata = metadataList.asJson.printWith(Printer.noSpaces)
