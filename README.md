@@ -8,7 +8,7 @@ The lambda does the following.
 * Untars it
 * Uploads all files from the package to S3 with a UUID. This includes files we don't care about but it's easier than trying to parse json on the fly
 * Parses the metadata json from the package.
-* Gets a series and department code from a static Map, based on the cite.
+* Gets a series and department code from a static Map, based on the court.
 * Generates the bagit files and uploads them to S3 in memory.
 * Copies the docx and metadata files into the `data/` directory
 * Starts a step function execution with the judgment details. 

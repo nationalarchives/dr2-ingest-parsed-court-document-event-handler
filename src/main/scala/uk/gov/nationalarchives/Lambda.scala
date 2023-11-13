@@ -39,7 +39,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         uriProcessor = new UriProcessor(potentialUri)
         _ <- uriProcessor.verifyFileNameStartsWithPressSummaryOfIfInUri(potentialFileName)
 
-        parsedUri <- uriProcessor.getCiteAndUriWithoutDocType
+        parsedUri <- uriProcessor.getCourtAndUriWithoutDocType
         payload = treMetadata.parameters.TRE.payload
         potentialCite = treMetadata.parameters.PARSER.cite
 
@@ -51,11 +51,12 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         output <- seriesMapper.createOutput(
           config.outputBucket,
           batchRef,
-          parsedUri.flatMap(_.potentialCite),
+          parsedUri.flatMap(_.potentialCourt),
           treInput.parameters.skipSeriesLookup
         )
-        _ <- fileProcessor.createMetadataFiles(
-          fileInfo.copy(checksum = treMetadata.parameters.TDR.`Document-Checksum-sha256`),
+        fileInfoWithUpdatedChecksum = fileInfo.copy(checksum = treMetadata.parameters.TDR.`Document-Checksum-sha256`)
+        bagitMetadata = fileProcessor.createBagitMetadataObjects(
+          fileInfoWithUpdatedChecksum,
           metadataFileInfo,
           parsedUri,
           potentialCite,
@@ -63,6 +64,14 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           output.department,
           output.series
         )
+        _ <- fileProcessor.createBagitFiles(
+          bagitMetadata,
+          fileInfoWithUpdatedChecksum,
+          metadataFileInfo,
+          output.department,
+          output.series
+        )
+
         _ <- s3.copy(outputBucket, fileInfo.id.toString, outputBucket, s"$batchRef/data/${fileInfo.id}")
         _ <- s3
           .copy(outputBucket, metadataFileInfo.id.toString, outputBucket, s"$batchRef/data/${metadataFileInfo.id}")

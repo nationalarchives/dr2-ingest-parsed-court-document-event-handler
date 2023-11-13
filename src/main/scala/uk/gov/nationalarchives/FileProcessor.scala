@@ -48,8 +48,8 @@ class FileProcessor(
 
   def readJsonFromPackage(metadataId: UUID): IO[TREMetadata] = {
     for {
-      s3Stream <- s3.download(uploadBucket, metadataId.toString)
-      contentString <- s3Stream
+      s3Publisher <- s3.download(uploadBucket, metadataId.toString)
+      contentString <- s3Publisher
         .toStreamBuffered[IO](chunkSize)
         .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
         .through(extractMetadataFromJson)
@@ -63,7 +63,7 @@ class FileProcessor(
     } yield parsedJson
   }
 
-  def createMetadataFiles(
+  def createBagitMetadataObjects(
       fileInfo: FileInfo,
       metadataFileInfo: FileInfo,
       parsedUri: Option[ParsedUri],
@@ -71,11 +71,11 @@ class FileProcessor(
       judgmentName: Option[String],
       department: Option[String],
       series: Option[String]
-  ): IO[String] = {
-    val potentialCiteFromUri = parsedUri.flatMap(_.potentialCite)
-    val (folderName, folderTitle) = if (department.flatMap(_ => series).isEmpty && potentialCiteFromUri.isDefined) {
+  ): List[BagitMetadataObject] = {
+    val potentialCourtFromUri = parsedUri.flatMap(_.potentialCourt)
+    val (folderName, folderTitle) = if (department.flatMap(_ => series).isEmpty && potentialCourtFromUri.isDefined) {
       ("Court Documents (court not matched)", None)
-    } else if (potentialCiteFromUri.isEmpty) {
+    } else if (potentialCourtFromUri.isEmpty) {
       ("Court Documents (court unknown)", None)
     } else {
       (parsedUri.get.uriWithoutDocType, Option(judgmentName.map(_.stripPrefix("Press Summary of ")).getOrElse("")))
@@ -108,10 +108,19 @@ class FileProcessor(
       metadataFileInfo.fileName,
       metadataFileInfo.fileSize
     )
-    val metadata = List(folderMetadataObject, assetMetadataObject, fileRowMetadataObject, fileMetadataObject)
-    val bagitString = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
+    List(folderMetadataObject, assetMetadataObject, fileRowMetadataObject, fileMetadataObject)
+  }
+
+  def createBagitFiles(
+      bagitMetadata: List[BagitMetadataObject],
+      fileInfo: FileInfo,
+      metadataFileInfo: FileInfo,
+      department: Option[String],
+      series: Option[String]
+  ): IO[String] = {
     for {
-      metadataChecksum <- createAndUploadMetadata(metadata)
+      metadataChecksum <- createMetadataJson(bagitMetadata)
+      bagitString = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
       bagitTxtChecksum <- uploadAsFile(bagitString, "bagit.txt")
       manifestString =
         s"${fileInfo.checksum} data/${fileInfo.id}\n${metadataFileInfo.checksum} data/${metadataFileInfo.id}"
@@ -190,7 +199,7 @@ class FileProcessor(
       .map(checksumToString)
   }
 
-  private def createAndUploadMetadata(metadata: List[BagitMetadataObject]): IO[String] = {
+  private def createMetadataJson(metadata: List[BagitMetadataObject]): IO[String] = {
     Stream
       .emit[IO, List[BagitMetadataObject]](metadata)
       .through(_.map(_.asJson.printWith(Printer.noSpaces)))
@@ -220,9 +229,7 @@ class FileProcessor(
       .getOrElse(tagManifestMap)
       .toSeq
       .sortBy(_._1)
-      .map { case (file, checksum) =>
-        s"$checksum $file"
-      }
+      .map { case (file, checksum) => s"$checksum $file" }
       .mkString("\n")
     uploadAsFile(tagManifest, "tagmanifest-sha256.txt")
   }

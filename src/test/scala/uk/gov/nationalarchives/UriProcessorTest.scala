@@ -9,7 +9,7 @@ import uk.gov.nationalarchives.UriProcessor.ParsedUri
 
 class UriProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPropertyChecks {
   private val uriTable: TableFor2[Option[String], Option[ParsedUri]] = Table(
-    ("uri", "expectedCiteAndUri"),
+    ("uri", "expectedCourtAndUri"),
     (Option("http://example.com/id/abcd/2023/1"), Option(ParsedUri(Option("abcd"), "http://example.com/id/abcd/2023/1"))),
     (
       Option("http://example.com/id/abcd/efgh/2024/123"),
@@ -27,17 +27,17 @@ class UriProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPro
     (None, None)
   )
 
-  forAll(uriTable) { (uri, expectedCiteAndUri) =>
-    "getCiteAndUriWithoutDocType" should s"parse the uri $uri and return the cite and uri without doc type" in {
+  forAll(uriTable) { (uri, expectedCourtAndUri) =>
+    "getCourtAndUriWithoutDocType" should s"parse the uri $uri and return the court and uri without doc type" in {
       val uriProcessor = new UriProcessor(uri)
-      uriProcessor.getCiteAndUriWithoutDocType.unsafeRunSync() should equal(expectedCiteAndUri)
+      uriProcessor.getCourtAndUriWithoutDocType.unsafeRunSync() should equal(expectedCourtAndUri)
     }
   }
 
-  "getCiteAndUriWithoutDocType" should "return an error if the url cannot be trimmed because of a missing year" in {
+  "getCourtAndUriWithoutDocType" should "return an error if the url cannot be trimmed because of a missing year" in {
     val uriProcessor = new UriProcessor(Option("http://example.com/id/mnop/qrst"))
     val ex = intercept[RuntimeException] {
-      uriProcessor.getCiteAndUriWithoutDocType.unsafeRunSync()
+      uriProcessor.getCourtAndUriWithoutDocType.unsafeRunSync()
     }
     ex.getMessage should equal(
       "Failure trying to trim off the doc type for http://example.com/id/mnop/qrst. Is the year missing?"
