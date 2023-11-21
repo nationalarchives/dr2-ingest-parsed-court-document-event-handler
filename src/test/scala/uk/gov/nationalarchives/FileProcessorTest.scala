@@ -27,6 +27,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
   val testTarGz: Array[Byte] = getClass.getResourceAsStream("/files/test.tar.gz").readAllBytes()
   val publisher: Flux[ByteBuffer] = Flux.just(ByteBuffer.wrap(testTarGz))
   val reference = "TEST-REFERENCE"
+  val potentialUri: Some[String] = Some("http://example.com/id/abcde/2023/1537")
 
   implicit val typeDecoder: Decoder[Type] = (c: HCursor) =>
     for {
@@ -308,7 +309,19 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
             val folderTitle = if (titleExpected) Option(expectedFolderTitle) else None
             val folder =
               BagitFolderMetadataObject(folderId, None, folderTitle, expectedFolderName, updatedIdFields)
-            val asset = BagitAssetMetadataObject(assetId, Option(folderId), expectedAssetTitle, expectedAssetTitle)
+            val asset =
+              BagitAssetMetadataObject(
+                assetId,
+                Option(folderId),
+                expectedAssetTitle,
+                expectedAssetTitle,
+                reference,
+                List(fileId),
+                List(metadataId),
+                treName,
+                potentialUri,
+                potentialCite
+              )
             val files = List(
               BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, treFileName, 1),
               BagitFileMetadataObject(metadataId, Option(assetId), "", 2, "metadataFileName.txt", 2)
@@ -322,7 +335,17 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
             val bagitMetadataObjects =
               fileProcessor
-                .createBagitMetadataObjects(fileInfo, metadataFileInfo, parsedUri, potentialCite, treName, department, series)
+                .createBagitMetadataObjects(
+                  fileInfo,
+                  metadataFileInfo,
+                  parsedUri,
+                  potentialCite,
+                  treName,
+                  potentialUri,
+                  reference,
+                  department,
+                  series
+                )
 
             bagitMetadataObjects should equal(expectedBagitMetadataObjects)
           }
@@ -347,7 +370,19 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
             val folderTitle = if (titleExpected) Option(expectedFolderTitle) else None
             val folder =
               BagitFolderMetadataObject(folderId, None, folderTitle, expectedFolderName, updatedIdFields)
-            val asset = BagitAssetMetadataObject(assetId, Option(folderId), expectedAssetTitle, expectedAssetTitle)
+            val asset =
+              BagitAssetMetadataObject(
+                assetId,
+                Option(folderId),
+                expectedAssetTitle,
+                expectedAssetTitle,
+                reference,
+                List(fileId),
+                List(metadataId),
+                treName,
+                potentialUri,
+                potentialCite
+              )
             val files = List(
               BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, treFileName, 1),
               BagitFileMetadataObject(metadataId, Option(assetId), "", 2, "metadataFileName.txt", 2)

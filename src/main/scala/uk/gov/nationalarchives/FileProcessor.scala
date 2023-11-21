@@ -69,6 +69,8 @@ class FileProcessor(
       parsedUri: Option[ParsedUri],
       potentialCite: Option[String],
       judgmentName: Option[String],
+      potentialUri: Option[String],
+      reference: String,
       department: Option[String],
       series: Option[String]
   ): List[BagitMetadataObject] = {
@@ -93,7 +95,19 @@ class FileProcessor(
     val folderId = uuidGenerator()
     val assetId = uuidGenerator()
     val folderMetadataObject = BagitFolderMetadataObject(folderId, None, folderTitle, folderName, idFields)
-    val assetMetadataObject = BagitAssetMetadataObject(assetId, Option(folderId), fileInfo.fileName, fileInfo.fileName)
+    val assetMetadataObject =
+      BagitAssetMetadataObject(
+        assetId,
+        Option(folderId),
+        fileInfo.fileName,
+        fileInfo.fileName,
+        reference,
+        List(fileInfo.id),
+        List(metadataFileInfo.id),
+        judgmentName,
+        potentialUri,
+        potentialCite
+      )
     val fileRowMetadataObject =
       BagitFileMetadataObject(
         fileInfo.id,
@@ -205,7 +219,7 @@ class FileProcessor(
   private def createMetadataJson(metadata: List[BagitMetadataObject]): IO[String] = {
     Stream
       .emit[IO, List[BagitMetadataObject]](metadata)
-      .through(_.map(_.asJson.printWith(Printer.noSpaces)))
+      .through(_.map(bagitMetadataObject => bagitMetadataObject.asJson.printWith(Printer.noSpaces)))
       .compile
       .string
       .flatMap(s => uploadAsFile(s, "metadata.json"))
@@ -259,8 +273,31 @@ object FileProcessor {
           }
         )
       }
-    case BagitAssetMetadataObject(id, parentId, title, name) =>
-      jsonFromMetadataObject(id, parentId, Option(title), Asset, name)
+    case BagitAssetMetadataObject(
+          id,
+          parentId,
+          title,
+          name,
+          id_UpstreamSystemReference,
+          originalFilesUuids,
+          originalMetadataFilesUuids,
+          description,
+          id_URI,
+          id_NeutralCitation
+        ) =>
+      val convertListOfUuidsToJsonStrArray = (fileUuids: List[UUID]) =>
+        fileUuids.map(fileUuid => Json.fromString(fileUuid.toString))
+      Json
+        .obj(
+          ("id_UpstreamSystemReference", Json.fromString(id_UpstreamSystemReference)),
+          ("originalFiles", Json.fromValues(convertListOfUuidsToJsonStrArray(originalFilesUuids))),
+          ("originalMetadataFiles", Json.fromValues(convertListOfUuidsToJsonStrArray(originalMetadataFilesUuids))),
+          ("description", description.map(Json.fromString).getOrElse(Null)),
+          ("id_URI", id_URI.map(Json.fromString).getOrElse(Null)),
+          ("id_NeutralCitation", id_NeutralCitation.map(Json.fromString).getOrElse(Null))
+        )
+        .deepDropNullValues
+        .deepMerge(jsonFromMetadataObject(id, parentId, Option(title), Asset, name))
     case BagitFileMetadataObject(id, parentId, title, sortOrder, name, fileSize) =>
       Json
         .obj(
@@ -322,7 +359,13 @@ object FileProcessor {
       id: UUID,
       parentId: Option[UUID],
       title: String,
-      name: String
+      name: String,
+      id_UpstreamSystemReference: String,
+      originalFiles: List[UUID],
+      originalMetadataFiles: List[UUID],
+      description: Option[String],
+      id_URI: Option[String],
+      id_NeutralCitation: Option[String]
   ) extends BagitMetadataObject
 
   case class BagitFileMetadataObject(

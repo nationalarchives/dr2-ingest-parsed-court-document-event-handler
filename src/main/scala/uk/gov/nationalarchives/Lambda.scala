@@ -61,6 +61,8 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           parsedUri,
           potentialCite,
           potentialFileName,
+          potentialUri,
+          treMetadata.parameters.TRE.reference,
           output.department,
           output.series
         )
