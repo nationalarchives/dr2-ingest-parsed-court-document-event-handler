@@ -68,7 +68,7 @@ class FileProcessor(
       metadataFileInfo: FileInfo,
       parsedUri: Option[ParsedUri],
       potentialCite: Option[String],
-      judgmentName: Option[String],
+      potentialJudgmentName: Option[String],
       potentialUri: Option[String],
       reference: String,
       department: Option[String],
@@ -82,7 +82,7 @@ class FileProcessor(
       else
         (
           parsedUri.get.uriWithoutDocType,
-          Option(judgmentName.map(_.stripPrefix("Press Summary of ")).getOrElse("")),
+          Option(potentialJudgmentName.map(_.stripPrefix("Press Summary of ")).getOrElse("")),
           List(IdField("URI", parsedUri.get.uriWithoutDocType))
         )
 
@@ -104,7 +104,7 @@ class FileProcessor(
         reference,
         List(fileInfo.id),
         List(metadataFileInfo.id),
-        judgmentName,
+        potentialJudgmentName,
         potentialUri,
         potentialCite
       )

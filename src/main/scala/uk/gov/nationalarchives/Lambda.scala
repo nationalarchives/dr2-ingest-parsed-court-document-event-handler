@@ -35,9 +35,9 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
 
         treMetadata <- fileProcessor.readJsonFromPackage(metadataFileInfo.id)
         potentialUri = treMetadata.parameters.PARSER.uri
-        potentialFileName = treMetadata.parameters.PARSER.name
+        potentialJudgmentName = treMetadata.parameters.PARSER.name
         uriProcessor = new UriProcessor(potentialUri)
-        _ <- uriProcessor.verifyFileNameStartsWithPressSummaryOfIfInUri(potentialFileName)
+        _ <- uriProcessor.verifyJudgmentNameStartsWithPressSummaryOfIfInUri(potentialJudgmentName)
 
         parsedUri <- uriProcessor.getCourtAndUriWithoutDocType
         payload = treMetadata.parameters.TRE.payload
@@ -60,7 +60,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           metadataFileInfo,
           parsedUri,
           potentialCite,
-          potentialFileName,
+          potentialJudgmentName,
           potentialUri,
           treMetadata.parameters.TRE.reference,
           output.department,
