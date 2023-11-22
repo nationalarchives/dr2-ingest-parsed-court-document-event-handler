@@ -86,27 +86,28 @@ class FileProcessor(
           List(IdField("URI", parsedUri.get.uriWithoutDocType))
         )
 
-    val idFields = potentialCite
-      .map { cite =>
-        List(IdField("Code", cite), IdField("Cite", cite)) ++ uriIdField
-      }
+    val folderMetadataIdFields = potentialCite
+      .map(cite => List(IdField("Code", cite), IdField("Cite", cite)) ++ uriIdField)
       .getOrElse(Nil)
+    val assetMetadataIdFields = List(
+      Option(IdField("UpstreamSystemReference", reference)),
+      potentialUri.map(uri => IdField("URI", uri)),
+      potentialCite.map(cite => IdField("NeutralCitation", cite))
+    ).flatten
     val fileTitle = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
     val folderId = uuidGenerator()
     val assetId = uuidGenerator()
-    val folderMetadataObject = BagitFolderMetadataObject(folderId, None, folderTitle, folderName, idFields)
+    val folderMetadataObject = BagitFolderMetadataObject(folderId, None, folderTitle, folderName, folderMetadataIdFields)
     val assetMetadataObject =
       BagitAssetMetadataObject(
         assetId,
         Option(folderId),
         fileInfo.fileName,
         fileInfo.fileName,
-        reference,
         List(fileInfo.id),
         List(metadataFileInfo.id),
         potentialJudgmentName,
-        potentialUri,
-        potentialCite
+        assetMetadataIdFields
       )
     val fileRowMetadataObject =
       BagitFileMetadataObject(
@@ -254,6 +255,10 @@ class FileProcessor(
 
 object FileProcessor {
   private val chunkSize: Int = 1024 * 64
+  private val convertIdFieldsToJson = (idFields: List[IdField]) =>
+    idFields.map { idField =>
+      (s"id_${idField.name}", Json.fromString(idField.value))
+    }
   implicit val customConfig: Configuration = Configuration.default.withDefaults
   implicit val parserDecoder: Decoder[Parser] = deriveConfiguredDecoder
   implicit val inputParametersDecoder: Decoder[TREInputParameters] = (c: HCursor) =>
@@ -265,39 +270,37 @@ object FileProcessor {
       skipSeriesLookup <- c.getOrElse("skipSeriesLookup")(false)
     } yield TREInputParameters(status, reference, skipSeriesLookup, s3Bucket, s3Key)
   implicit val bagitMetadataEncoder: Encoder[BagitMetadataObject] = {
-    case BagitFolderMetadataObject(id, parentId, title, name, idFields) =>
+    case BagitFolderMetadataObject(id, parentId, title, name, folderMetadataIdFields) =>
       jsonFromMetadataObject(id, parentId, title, ArchiveFolder, name).deepMerge {
-        Json.fromFields(
-          idFields.map { idField =>
-            (s"id_${idField.name}", Json.fromString(idField.value))
-          }
-        )
+        Json.fromFields(convertIdFieldsToJson(folderMetadataIdFields))
       }
     case BagitAssetMetadataObject(
           id,
           parentId,
           title,
           name,
-          id_UpstreamSystemReference,
           originalFilesUuids,
           originalMetadataFilesUuids,
           description,
-          id_URI,
-          id_NeutralCitation
+          assetMetadataIdFields
         ) =>
       val convertListOfUuidsToJsonStrArray = (fileUuids: List[UUID]) =>
         fileUuids.map(fileUuid => Json.fromString(fileUuid.toString))
-      Json
-        .obj(
-          ("id_UpstreamSystemReference", Json.fromString(id_UpstreamSystemReference)),
-          ("originalFiles", Json.fromValues(convertListOfUuidsToJsonStrArray(originalFilesUuids))),
-          ("originalMetadataFiles", Json.fromValues(convertListOfUuidsToJsonStrArray(originalMetadataFilesUuids))),
-          ("description", description.map(Json.fromString).getOrElse(Null)),
-          ("id_URI", id_URI.map(Json.fromString).getOrElse(Null)),
-          ("id_NeutralCitation", id_NeutralCitation.map(Json.fromString).getOrElse(Null))
-        )
-        .deepDropNullValues
-        .deepMerge(jsonFromMetadataObject(id, parentId, Option(title), Asset, name))
+
+      jsonFromMetadataObject(id, parentId, Option(title), Asset, name)
+        .deepMerge {
+          Json.fromFields(convertIdFieldsToJson(assetMetadataIdFields))
+        }
+        .deepMerge {
+          Json
+            .obj(
+              ("originalFiles", Json.fromValues(convertListOfUuidsToJsonStrArray(originalFilesUuids))),
+              ("originalMetadataFiles", Json.fromValues(convertListOfUuidsToJsonStrArray(originalMetadataFilesUuids))),
+              ("description", description.map(Json.fromString).getOrElse(Null))
+            )
+            .deepDropNullValues
+        }
+
     case BagitFileMetadataObject(id, parentId, title, sortOrder, name, fileSize) =>
       Json
         .obj(
@@ -360,12 +363,10 @@ object FileProcessor {
       parentId: Option[UUID],
       title: String,
       name: String,
-      id_UpstreamSystemReference: String,
       originalFiles: List[UUID],
       originalMetadataFiles: List[UUID],
       description: Option[String],
-      id_URI: Option[String],
-      id_NeutralCitation: Option[String]
+      idFields: List[IdField] = Nil
   ) extends BagitMetadataObject
 
   case class BagitFileMetadataObject(

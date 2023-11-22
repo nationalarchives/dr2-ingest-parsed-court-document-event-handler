@@ -231,12 +231,14 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
         Option(folderId),
         "Test.docx",
         "Test.docx",
-        reference,
         List(fileId),
         List(metadataFileId),
         Some("test"),
-        Some("https://example.com/id/court/2023/"),
-        potentialCite.map(_ => "cite")
+        List(
+          Option(IdField("UpstreamSystemReference", reference)),
+          Option(IdField("URI", "https://example.com/id/court/2023/")),
+          potentialCite.map(_ => IdField("NeutralCitation", "cite"))
+        ).flatten
       )
       val expectedBagitTxt = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
       val expectedBagInfo = "Department: TEST\nSeries: TEST SERIES"

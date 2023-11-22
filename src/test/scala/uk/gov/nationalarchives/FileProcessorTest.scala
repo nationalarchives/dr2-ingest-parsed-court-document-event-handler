@@ -315,12 +315,14 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
                 Option(folderId),
                 expectedAssetTitle,
                 expectedAssetTitle,
-                reference,
                 List(fileId),
                 List(metadataId),
                 treName,
-                potentialUri,
-                potentialCite
+                List(
+                  Option(IdField("UpstreamSystemReference", reference)),
+                  potentialUri.map(uri => IdField("URI", uri)),
+                  potentialCite.map(cite => IdField("NeutralCitation", cite))
+                ).flatten
               )
             val files = List(
               BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, treFileName, 1),
@@ -376,12 +378,14 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
                 Option(folderId),
                 expectedAssetTitle,
                 expectedAssetTitle,
-                reference,
                 List(fileId),
                 List(metadataId),
                 treName,
-                potentialUri,
-                potentialCite
+                List(
+                  Option(IdField("id_UpstreamSystemReference", reference)),
+                  potentialUri.map(uri => IdField("id_URI", uri)),
+                  potentialCite.map(cite => IdField("id_NeutralCitation", cite))
+                ).flatten
               )
             val files = List(
               BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, treFileName, 1),
