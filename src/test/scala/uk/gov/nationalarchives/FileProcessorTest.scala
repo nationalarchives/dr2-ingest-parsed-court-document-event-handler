@@ -46,6 +46,13 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
        |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
        |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
 
+  private val tdrParams = Map(
+    "Document-Checksum-sha256" -> "abcde",
+    "Source-Organization" -> "test-organisation",
+    "Internal-Sender-Identifier" -> "test-identifier",
+    "Consignment-Export-Datetime" -> "2023-10-31T13:40:54Z"
+  )
+
   private val uuids: List[UUID] = List(
     UUID.fromString("6e827e19-6a33-46c3-8730-b242c203d8c1"),
     UUID.fromString("49e4a726-6297-4f8e-8867-fb50bd5acd86")
@@ -179,50 +186,57 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     res should equal(expectedMetadata)
   }
 
-  "readJsonFromPackage" should "return an error where a non-optional value was expected for a field in the json" in {
-    val s3 = mock[DAS3Client[IO]]
-    val metadataJsonWithMissingParams: String =
-      s"""{"parameters":{"TDR": {"Document-Checksum-sha256": null, "Source-Organization": "test-organisation",
-         |"Internal-Sender-Identifier": "test-identifier", "Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
+  tdrParams.foreach { case (paramNameToMakeNull, _) =>
+    "readJsonFromPackage" should s"return an error if a null was passed in for the '$paramNameToMakeNull' field in the json" in {
+      val s3 = mock[DAS3Client[IO]]
+      val tdrParamsWithANullValue = tdrParams.map { case (paramName, value) =>
+        if (paramName == paramNameToMakeNull) (paramName, None) else (paramName, Some(value))
+      }
+
+      val metadataJsonWithMissingParams: String =
+        s"""{"parameters":{"TDR": ${tdrParamsWithANullValue.asJson.toString()},
          |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
          |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
-    val downloadResponse = Flux.just(ByteBuffer.wrap(metadataJsonWithMissingParams.getBytes()))
-    val metadataId = UUID.randomUUID()
-    when(s3.download(ArgumentMatchers.eq("upload"), ArgumentMatchers.eq(metadataId.toString)))
-      .thenReturn(IO(downloadResponse))
+      val downloadResponse = Flux.just(ByteBuffer.wrap(metadataJsonWithMissingParams.getBytes()))
+      val metadataId = UUID.randomUUID()
+      when(s3.download(ArgumentMatchers.eq("upload"), ArgumentMatchers.eq(metadataId.toString)))
+        .thenReturn(IO(downloadResponse))
 
-    val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
+      val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
 
-    val ex = intercept[DecodingFailure] {
-      fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
+      val ex = intercept[DecodingFailure] {
+        fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
+      }
+
+      ex.getMessage should equal(
+        s"""DecodingFailure at .parameters.TDR.$paramNameToMakeNull: Got value 'null' with wrong type, expecting string""".stripMargin
+      )
     }
-
-    ex.getMessage should equal(
-      """DecodingFailure at .parameters.TDR.Document-Checksum-sha256: Got value 'null' with wrong type, expecting string""".stripMargin
-    )
   }
 
-  "readJsonFromPackage" should "return an error for a json that is missing required fields" in {
-    val s3 = mock[DAS3Client[IO]]
-    val metadataJsonWithMissingParams: String =
-      s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde","Internal-Sender-Identifier": "test-identifier",
-         |"Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
+  tdrParams.foreach { case (paramNameToExclude, _) =>
+    "readJsonFromPackage" should s"return an error for a json that is missing the '$paramNameToExclude' field" in {
+      val s3 = mock[DAS3Client[IO]]
+      val tdrParamsWithMissingParam = tdrParams.filterNot { case (paramName, _) => paramName == paramNameToExclude }
+      val metadataJsonWithMissingParams: String =
+        s"""{"parameters":{"TDR": ${tdrParamsWithMissingParam.asJson.toString()},
          |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
          |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
-    val downloadResponse = Flux.just(ByteBuffer.wrap(metadataJsonWithMissingParams.getBytes()))
-    val metadataId = UUID.randomUUID()
-    when(s3.download(ArgumentMatchers.eq("upload"), ArgumentMatchers.eq(metadataId.toString)))
-      .thenReturn(IO(downloadResponse))
+      val downloadResponse = Flux.just(ByteBuffer.wrap(metadataJsonWithMissingParams.getBytes()))
+      val metadataId = UUID.randomUUID()
+      when(s3.download(ArgumentMatchers.eq("upload"), ArgumentMatchers.eq(metadataId.toString)))
+        .thenReturn(IO(downloadResponse))
 
-    val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
+      val fileProcessor = new FileProcessor("download", "upload", "ref", s3, UUIDGenerator().uuidGenerator)
 
-    val ex = intercept[DecodingFailure] {
-      fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
+      val ex = intercept[DecodingFailure] {
+        fileProcessor.readJsonFromPackage(metadataId).unsafeRunSync()
+      }
+
+      ex.getMessage should equal(
+        s"""DecodingFailure at .parameters.$paramNameToExclude: Missing required field""".stripMargin
+      )
     }
-
-    ex.getMessage should equal(
-      """DecodingFailure at .parameters.Source-Organization: Missing required field""".stripMargin
-    )
   }
 
   "readJsonFromPackage" should "return an error for an invalid json" in {
