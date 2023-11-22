@@ -75,7 +75,7 @@ class FileProcessor(
       series: Option[String]
   ): List[BagitMetadataObject] = {
     val potentialCourtFromUri = parsedUri.flatMap(_.potentialCourt)
-    val (folderName, folderTitle, uriIdField) =
+    val (folderName, potentialFolderTitle, uriIdField) =
       if (department.flatMap(_ => series).isEmpty && potentialCourtFromUri.isDefined)
         ("Court Documents (court not matched)", None, Nil)
       else if (potentialCourtFromUri.isEmpty) ("Court Documents (court unknown)", None, Nil)
@@ -97,7 +97,7 @@ class FileProcessor(
     val fileTitle = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
     val folderId = uuidGenerator()
     val assetId = uuidGenerator()
-    val folderMetadataObject = BagitFolderMetadataObject(folderId, None, folderTitle, folderName, folderMetadataIdFields)
+    val folderMetadataObject = BagitFolderMetadataObject(folderId, None, potentialFolderTitle, folderName, folderMetadataIdFields)
     val assetMetadataObject =
       BagitAssetMetadataObject(
         assetId,
