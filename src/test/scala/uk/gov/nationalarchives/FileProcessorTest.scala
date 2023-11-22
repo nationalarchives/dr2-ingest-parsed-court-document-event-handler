@@ -289,7 +289,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
   val treNameTable: TableFor4[Option[String], String, String, String] = Table(
     ("treName", "treFileName", "expectedFolderTitle", "expectedAssetTitle"),
     (Option("Test title"), "fileName.txt", "Test title", "fileName.txt"),
-    (None, "fileName.txt", "", "fileName.txt"),
+    (None, "fileName.txt", null, "fileName.txt"),
     (Option("Press Summary of test"), "Press Summary of test.txt", "test", "Press Summary of test.txt")
   )
 

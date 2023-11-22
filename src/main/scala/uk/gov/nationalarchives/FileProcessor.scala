@@ -82,7 +82,7 @@ class FileProcessor(
       else
         (
           parsedUri.get.uriWithoutDocType,
-          Option(potentialJudgmentName.map(_.stripPrefix("Press Summary of ")).getOrElse("")),
+          potentialJudgmentName.map(_.stripPrefix("Press Summary of ")),
           List(IdField("URI", parsedUri.get.uriWithoutDocType))
         )
 
