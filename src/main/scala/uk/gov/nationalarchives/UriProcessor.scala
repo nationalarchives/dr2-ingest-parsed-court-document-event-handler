@@ -5,9 +5,9 @@ import cats.implicits._
 import uk.gov.nationalarchives.UriProcessor.ParsedUri
 
 class UriProcessor(potentialUri: Option[String]) {
-  def verifyFileNameStartsWithPressSummaryOfIfInUri(potentialFileName: Option[String]): IO[Unit] = {
+  def verifyJudgmentNameStartsWithPressSummaryOfIfInUri(potentialJudgmentName: Option[String]): IO[Unit] = {
     val uriContainsPressSummary = potentialUri.exists(_.contains("/press-summary"))
-    val fileNameDoesNotStartWithPressSummaryOf = !potentialFileName.exists(_.startsWith("Press Summary of "))
+    val fileNameDoesNotStartWithPressSummaryOf = !potentialJudgmentName.exists(_.startsWith("Press Summary of "))
     if (uriContainsPressSummary && fileNameDoesNotStartWithPressSummaryOf)
       IO.raiseError(new Exception("URI contains '/press-summary' but file does not start with 'Press Summary of '"))
     else IO.unit

@@ -27,6 +27,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
   val testTarGz: Array[Byte] = getClass.getResourceAsStream("/files/test.tar.gz").readAllBytes()
   val publisher: Flux[ByteBuffer] = Flux.just(ByteBuffer.wrap(testTarGz))
   val reference = "TEST-REFERENCE"
+  val potentialUri: Some[String] = Some("http://example.com/id/abcde/2023/1537")
 
   implicit val typeDecoder: Decoder[Type] = (c: HCursor) =>
     for {
@@ -302,7 +303,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
   val treNameTable: TableFor4[Option[String], String, String, String] = Table(
     ("treName", "treFileName", "expectedFolderTitle", "expectedAssetTitle"),
     (Option("Test title"), "fileName.txt", "Test title", "fileName.txt"),
-    (None, "fileName.txt", "", "fileName.txt"),
+    (None, "fileName.txt", null, "fileName.txt"),
     (Option("Press Summary of test"), "Press Summary of test.txt", "test", "Press Summary of test.txt")
   )
 
@@ -322,7 +323,21 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
             val folderTitle = if (titleExpected) Option(expectedFolderTitle) else None
             val folder =
               BagitFolderMetadataObject(folderId, None, folderTitle, expectedFolderName, updatedIdFields)
-            val asset = BagitAssetMetadataObject(assetId, Option(folderId), expectedAssetTitle, expectedAssetTitle)
+            val asset =
+              BagitAssetMetadataObject(
+                assetId,
+                Option(folderId),
+                expectedAssetTitle,
+                expectedAssetTitle,
+                List(fileId),
+                List(metadataId),
+                treName,
+                List(
+                  Option(IdField("UpstreamSystemReference", reference)),
+                  potentialUri.map(uri => IdField("URI", uri)),
+                  potentialCite.map(cite => IdField("NeutralCitation", cite))
+                ).flatten
+              )
             val files = List(
               BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, treFileName, 1),
               BagitFileMetadataObject(metadataId, Option(assetId), "", 2, "metadataFileName.txt", 2)
@@ -336,7 +351,17 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
             val bagitMetadataObjects =
               fileProcessor
-                .createBagitMetadataObjects(fileInfo, metadataFileInfo, parsedUri, potentialCite, treName, department, series)
+                .createBagitMetadataObjects(
+                  fileInfo,
+                  metadataFileInfo,
+                  parsedUri,
+                  potentialCite,
+                  treName,
+                  potentialUri,
+                  reference,
+                  department,
+                  series
+                )
 
             bagitMetadataObjects should equal(expectedBagitMetadataObjects)
           }
@@ -361,7 +386,21 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
             val folderTitle = if (titleExpected) Option(expectedFolderTitle) else None
             val folder =
               BagitFolderMetadataObject(folderId, None, folderTitle, expectedFolderName, updatedIdFields)
-            val asset = BagitAssetMetadataObject(assetId, Option(folderId), expectedAssetTitle, expectedAssetTitle)
+            val asset =
+              BagitAssetMetadataObject(
+                assetId,
+                Option(folderId),
+                expectedAssetTitle,
+                expectedAssetTitle,
+                List(fileId),
+                List(metadataId),
+                treName,
+                List(
+                  Option(IdField("id_UpstreamSystemReference", reference)),
+                  potentialUri.map(uri => IdField("id_URI", uri)),
+                  potentialCite.map(cite => IdField("id_NeutralCitation", cite))
+                ).flatten
+              )
             val files = List(
               BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, treFileName, 1),
               BagitFileMetadataObject(metadataId, Option(assetId), "", 2, "metadataFileName.txt", 2)
