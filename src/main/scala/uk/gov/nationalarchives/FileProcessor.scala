@@ -246,7 +246,7 @@ class FileProcessor(
   private def createMetadataJson(metadata: List[BagitMetadataObject]): IO[String] = {
     Stream
       .emit[IO, List[BagitMetadataObject]](metadata)
-      .through(_.map(bagitMetadataObject => bagitMetadataObject.asJson.printWith(Printer.noSpaces)))
+      .through(_.map(bagitMetadataObjects => bagitMetadataObjects.asJson.printWith(Printer.noSpaces)))
       .compile
       .string
       .flatMap(s => uploadAsFile(s, "metadata.json"))
