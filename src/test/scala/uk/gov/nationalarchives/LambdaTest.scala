@@ -38,8 +38,9 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
 
   val metadataFilesAndChecksums: List[(String, String)] = List(
     ("metadata.json", "01"),
-    ("bagit.txt", "11"),
+    ("bag-info.json", "31"),
     ("bag-info.txt", "21"),
+    ("bagit.txt", "11"),
     ("manifest-sha256.txt", "51"),
     ("tagmanifest-sha256.txt", "61")
   )
@@ -242,6 +243,10 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
       )
       val expectedBagitTxt = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
       val expectedBagInfo = "Department: TEST\nSeries: TEST SERIES"
+      val expectedBagInfoJson =
+        """{"id_ConsignmentReference":"test-identifier","id_UpstreamSystemReference":"TEST-REFERENCE",""" +
+          """"transferringBody":"test-organisation","transferCompleteDatetime":"2023-10-31T13:40:54Z",""" +
+          """"upstreamSystem":"TRE: FCL Parser workflow","digitalAssetSource":"Born Digital","digitalAssetSubtype":"FCL"}"""
       val expectedFileMetadata = List(
         BagitFileMetadataObject(fileId, Option(assetId), "Test", 1, "Test.docx", 15684),
         BagitFileMetadataObject(
@@ -267,11 +272,12 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
       val expectedMetadata = metadataList.asJson.printWith(Printer.noSpaces)
       val expectedManifest = s"abcde data/$fileId\n81 data/$metadataFileId"
       val expectedTagManifest =
-        "21 bag-info.txt\n11 bagit.txt\n51 manifest-sha256.txt\n01 metadata.json"
+        "31 bag-info.json\n21 bag-info.txt\n11 bagit.txt\n51 manifest-sha256.txt\n01 metadata.json"
 
       val metadataFromResponse = filterEvents("metadata.json")
       metadataFromResponse should equal(expectedMetadata)
       filterEvents("bagit.txt") should equal(expectedBagitTxt)
+      filterEvents("bag-info.json") should equal(expectedBagInfoJson)
       filterEvents("bag-info.txt") should equal(expectedBagInfo)
       filterEvents("manifest-sha256.txt") should equal(expectedManifest)
       filterEvents("tagmanifest-sha256.txt") should equal(expectedTagManifest)
