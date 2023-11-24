@@ -22,6 +22,7 @@ import org.scalatest.prop.{TableDrivenPropertyChecks, TableFor2, TableFor4}
 
 import java.net.URI
 import java.util.{Base64, HexFormat, UUID}
+import scala.collection.immutable.ListMap
 import scala.jdk.CollectionConverters._
 
 class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPropertyChecks {
@@ -217,11 +218,16 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
       IngestParserTest().handleRequest(event(), null)
       val serveEvents = s3Server.getAllServeEvents.asScala
 
-      def filterEvents(name: String) = serveEvents
+      def getContentOfAllMetadataFilePutEvents: List[String] = serveEvents
         .map(_.getRequest)
-        .find(ev => ev.getUrl == s"/$testOutputBucket/$reference/$name" && ev.getMethod == RequestMethod.PUT)
+        .filter { ev =>
+          val outputBucket = s"/$testOutputBucket/$reference/"
+          // Currently assuming that all metadata files names contain a "." in them for the extension
+          ev.getUrl
+            .contains(outputBucket) && ev.getUrl.stripPrefix(outputBucket).contains(".") && ev.getMethod == RequestMethod.PUT
+        }
         .map(_.getBodyAsString.split("\r\n")(1).trim)
-        .head
+        .toList
 
       val folderId = UUID.fromString("4e6bac50-d80a-4c68-bd92-772ac9701f14")
       val assetId = UUID.fromString("c2e7866e-5e94-4b4e-a49f-043ad937c18a")
@@ -274,13 +280,21 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
       val expectedTagManifest =
         "31 bag-info.json\n21 bag-info.txt\n11 bagit.txt\n51 manifest-sha256.txt\n01 metadata.json"
 
-      val metadataFromResponse = filterEvents("metadata.json")
-      metadataFromResponse should equal(expectedMetadata)
-      filterEvents("bagit.txt") should equal(expectedBagitTxt)
-      filterEvents("bag-info.json") should equal(expectedBagInfoJson)
-      filterEvents("bag-info.txt") should equal(expectedBagInfo)
-      filterEvents("manifest-sha256.txt") should equal(expectedManifest)
-      filterEvents("tagmanifest-sha256.txt") should equal(expectedTagManifest)
+      val metadataFilePutEvents: List[String] = getContentOfAllMetadataFilePutEvents
+      val expectedMetadataFileContents = ListMap(
+        "tagmanifest-sha256.txt" -> expectedTagManifest,
+        "bag-info.json" -> expectedBagInfoJson,
+        "bag-info.txt" -> expectedBagInfo,
+        "manifest-sha256.txt" -> expectedManifest,
+        "bagit.txt" -> expectedBagitTxt,
+        "metadata.json" -> expectedMetadata
+      )
+      val expectedContentAndActual = metadataFilePutEvents.zip(expectedMetadataFileContents.values)
+
+      expectedContentAndActual.length should equal(metadataFilePutEvents.length)
+      expectedContentAndActual.foreach { case (actualMetadataContent, expectedMetadataContent) =>
+        actualMetadataContent should equal(expectedMetadataContent)
+      }
     }
   }
 
