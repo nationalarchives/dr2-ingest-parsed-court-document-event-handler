@@ -1,9 +1,10 @@
 import sbt._
 object Dependencies {
-  lazy val logbackVersion = "2.20.0"
+  lazy val logbackVersion = "2.22.0"
   lazy val pureConfigVersion = "0.17.4"
-  lazy val daAwsClientsVersion = "0.1.26"
+  lazy val daAwsClientsVersion = "0.1.27"
   private val circeVersion = "0.14.6"
+
   lazy val circeCore = "io.circe" %% "circe-core" % circeVersion
   lazy val circeGeneric = "io.circe" %% "circe-generic" % circeVersion
   lazy val circeParser = "io.circe" %% "circe-parser" % circeVersion
@@ -18,11 +19,11 @@ object Dependencies {
   lazy val reactiveStreams = "co.fs2" %% "fs2-reactive-streams" % "3.9.2"
   lazy val s3Client = "uk.gov.nationalarchives" %% "da-s3-client" % daAwsClientsVersion
   lazy val sfnClient = "uk.gov.nationalarchives" %% "da-sfn-client" % daAwsClientsVersion
-  lazy val commonsCompress = "org.apache.commons" % "commons-compress" % "1.24.0"
+  lazy val commonsCompress = "org.apache.commons" % "commons-compress" % "1.25.0"
   lazy val fs2IO = "co.fs2" %% "fs2-io" % "3.9.2"
   lazy val upickle = "com.lihaoyi" %% "upickle" % "3.1.3"
   lazy val scalaTest = "org.scalatest" %% "scalatest" % "3.2.17"
-  lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.22"
+  lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.29"
   lazy val wiremock = "com.github.tomakehurst" % "wiremock" % "3.0.1"
-  lazy val reactorTest = "io.projectreactor" % "reactor-test" % "3.5.10"
+  lazy val reactorTest = "io.projectreactor" % "reactor-test" % "3.5.12"
 }
