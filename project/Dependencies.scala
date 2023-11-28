@@ -23,7 +23,7 @@ object Dependencies {
   lazy val fs2IO = "co.fs2" %% "fs2-io" % "3.9.3"
   lazy val upickle = "com.lihaoyi" %% "upickle" % "3.1.3"
   lazy val scalaTest = "org.scalatest" %% "scalatest" % "3.2.17"
-  lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.29"
+  lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.30"
   lazy val wiremock = "com.github.tomakehurst" % "wiremock" % "3.0.1"
   lazy val reactorTest = "io.projectreactor" % "reactor-test" % "3.5.12"
 }
