@@ -173,7 +173,7 @@ class FileProcessor(
 
   private def unarchiveAndUploadToS3(tarInputStream: TarArchiveInputStream): Stream[IO, (String, FileInfo)] = {
     Stream
-      .eval(IO.blocking(Option(tarInputStream.getNextTarEntry)))
+      .eval(IO.blocking(Option(tarInputStream.getNextEntry)))
       .flatMap(Stream.fromOption[IO](_))
       .flatMap { tarEntry =>
         Stream
