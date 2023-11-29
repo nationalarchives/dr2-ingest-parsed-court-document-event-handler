@@ -222,7 +222,6 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
         .map(_.getRequest)
         .filter { ev =>
           val outputBucket = s"/$testOutputBucket/$reference/"
-          // Currently assuming that all metadata files names contain a "." in them for the extension
           ev.getUrl
             .contains(outputBucket) && ev.getUrl.stripPrefix(outputBucket).contains(".") && ev.getMethod == RequestMethod.PUT
         }
