@@ -181,12 +181,7 @@ class FileProcessor(
       bagInfoIdFields
     )
 
-    Stream
-      .emit[IO, BagInfo](bagInfo)
-      .through(_.map(bagInfo => bagInfo.asJson.printWith(Printer.noSpaces)))
-      .compile
-      .string
-      .flatMap(bagInfoString => uploadAsFile(bagInfoString, "bag-info.json"))
+    uploadAsFile(bagInfo.asJson.printWith(Printer.noSpaces), "bag-info.json")
   }
 
   private def extractMetadataFromJson(str: Stream[IO, Byte]): Stream[IO, TREMetadata] = {
@@ -243,14 +238,8 @@ class FileProcessor(
       .map(checksumToString)
   }
 
-  private def createMetadataJson(metadata: List[BagitMetadataObject]): IO[String] = {
-    Stream
-      .emit[IO, List[BagitMetadataObject]](metadata)
-      .through(_.map(bagitMetadataObjects => bagitMetadataObjects.asJson.printWith(Printer.noSpaces)))
-      .compile
-      .string
-      .flatMap(s => uploadAsFile(s, "metadata.json"))
-  }
+  private def createMetadataJson(metadata: List[BagitMetadataObject]): IO[String] =
+    uploadAsFile(metadata.asJson.printWith(Printer.noSpaces), "metadata.json")
 
   private def checksumToString(checksum: String): String =
     Option(checksum)
