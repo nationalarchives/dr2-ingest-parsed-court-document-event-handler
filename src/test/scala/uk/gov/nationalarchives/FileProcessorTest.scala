@@ -21,6 +21,7 @@ import uk.gov.nationalarchives.FileProcessor._
 import uk.gov.nationalarchives.UriProcessor.ParsedUri
 
 import java.nio.ByteBuffer
+import java.time.OffsetDateTime
 import java.util.{Base64, HexFormat, UUID}
 
 class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPropertyChecks {
@@ -278,6 +279,19 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
   val notMatched = "Court Documents (court not matched)"
   val unknown = "Court Documents (court unknown)"
 
+  private val treMetadata = TREMetadata(
+    TREMetadataParameters(
+      mock[Parser],
+      TREParams(reference, mock[Payload]),
+      TDRParams(
+        tdrParams("Document-Checksum-sha256"),
+        tdrParams("Source-Organization"),
+        tdrParams("Internal-Sender-Identifier"),
+        OffsetDateTime.parse(tdrParams("Consignment-Export-Datetime"))
+      )
+    )
+  )
+
   val citeTable: TableFor2[Option[String], List[IdField]] = Table(
     ("potentialCite", "idFields"),
     (None, Nil),
@@ -416,26 +430,40 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
               s"""fileChecksum data/$fileId
              |metadataChecksum data/$metadataId""".stripMargin
 
+            val bagInfoJson = BagInfo(
+              treMetadata.parameters.TDR.`Source-Organization`,
+              treMetadata.parameters.TDR.`Consignment-Export-Datetime`,
+              "TRE: FCL Parser workflow",
+              "Born Digital",
+              "FCL",
+              List(
+                IdField("ConsignmentReference", treMetadata.parameters.TDR.`Internal-Sender-Identifier`),
+                IdField("UpstreamSystemReference", treMetadata.parameters.TRE.reference)
+              )
+            )
+            val bagInfoString = bagInfoJson.asJson.printWith(Printer.noSpaces)
+
             val metadataChecksum = "989681"
             val bagitChecksum = "989683"
             val manifestChecksum = "989684"
             val bagInfoChecksum = "989685"
-            val tagManifestChecksum = "989686"
+            val bagInfoJsonChecksum = "989686"
+            val tagManifestChecksum = "989687"
 
             val tagManifest = List(
+              s"$bagInfoJsonChecksum bag-info.json",
               s"$bagitChecksum bagit.txt",
               s"$manifestChecksum manifest-sha256.txt",
               s"$metadataChecksum metadata.json"
             )
-            val tagManifestString = (if (includeBagInfo) {
-                                       s"$bagInfoChecksum bag-info.txt" :: tagManifest
-                                     } else {
-                                       tagManifest
-                                     }).mkString("\n")
+            val tagManifestString = (
+              if (includeBagInfo) List(tagManifest.head, s"$bagInfoChecksum bag-info.txt") ++ tagManifest.tail else tagManifest
+            ).mkString("\n")
 
             mockUpload(s3, "metadata.json", metadataJsonString, metadataChecksum)
             mockUpload(s3, "bagit.txt", bagitTxtContent, bagitChecksum)
             mockUpload(s3, "manifest-sha256.txt", manifestString, manifestChecksum)
+            mockUpload(s3, "bag-info.json", bagInfoString, bagInfoJsonChecksum)
             if (includeBagInfo) {
               val bagInfoString = s"Department: ${department.get}\nSeries: ${series.get}"
               mockUpload(s3, "bag-info.txt", bagInfoString, bagInfoChecksum)
@@ -448,7 +476,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
             val tagManifestChecksumResult =
               fileProcessor
-                .createBagitFiles(metadataJsonList, fileInfo, metadataFileInfo, department, series)
+                .createBagitFiles(metadataJsonList, fileInfo, metadataFileInfo, treMetadata, department, series)
                 .unsafeRunSync()
 
             tagManifestChecksumResult should equal(tagManifestChecksum)
@@ -483,6 +511,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
           ),
           fileInfo,
           metadataFileInfo,
+          treMetadata,
           Option("department"),
           Option("series")
         )

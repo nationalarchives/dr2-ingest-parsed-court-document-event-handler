@@ -70,6 +70,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           bagitMetadata,
           fileInfoWithUpdatedChecksum,
           metadataFileInfo,
+          treMetadata,
           output.department,
           output.series
         )

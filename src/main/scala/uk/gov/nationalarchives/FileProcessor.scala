@@ -133,6 +133,7 @@ class FileProcessor(
       bagitMetadata: List[BagitMetadataObject],
       fileInfo: FileInfo,
       metadataFileInfo: FileInfo,
+      treMetadata: TREMetadata,
       department: Option[String],
       series: Option[String]
   ): IO[String] = {
@@ -144,11 +145,13 @@ class FileProcessor(
         s"${fileInfo.checksum} data/${fileInfo.id}\n${metadataFileInfo.checksum} data/${metadataFileInfo.id}"
       manifestSha256Checksum <- uploadAsFile(manifestString, "manifest-sha256.txt")
       bagInfoChecksum <- createBagInfo(department, series)
+      bagInfoJsonChecksum <- createBagInfoJson(treMetadata)
       tagManifest <- createTagManifest(
         metadataChecksum,
         bagitTxtChecksum,
         manifestSha256Checksum,
-        bagInfoChecksum
+        bagInfoChecksum,
+        bagInfoJsonChecksum
       )
     } yield tagManifest
   }
@@ -162,6 +165,24 @@ class FileProcessor(
       uploadAsFile(bagInfoString, "bag-info.txt")
     }
   }.sequence
+
+  private def createBagInfoJson(treMetadata: TREMetadata): IO[String] = {
+    val bagInfoIdFields =
+      List(
+        IdField("ConsignmentReference", treMetadata.parameters.TDR.`Internal-Sender-Identifier`),
+        IdField("UpstreamSystemReference", treMetadata.parameters.TRE.reference)
+      )
+    val bagInfo = BagInfo(
+      treMetadata.parameters.TDR.`Source-Organization`,
+      treMetadata.parameters.TDR.`Consignment-Export-Datetime`,
+      "TRE: FCL Parser workflow",
+      "Born Digital",
+      "FCL",
+      bagInfoIdFields
+    )
+
+    uploadAsFile(bagInfo.asJson.printWith(Printer.noSpaces), "bag-info.json")
+  }
 
   private def extractMetadataFromJson(str: Stream[IO, Byte]): Stream[IO, TREMetadata] = {
     str
@@ -217,14 +238,8 @@ class FileProcessor(
       .map(checksumToString)
   }
 
-  private def createMetadataJson(metadata: List[BagitMetadataObject]): IO[String] = {
-    Stream
-      .emit[IO, List[BagitMetadataObject]](metadata)
-      .through(_.map(bagitMetadataObject => bagitMetadataObject.asJson.printWith(Printer.noSpaces)))
-      .compile
-      .string
-      .flatMap(s => uploadAsFile(s, "metadata.json"))
-  }
+  private def createMetadataJson(metadata: List[BagitMetadataObject]): IO[String] =
+    uploadAsFile(metadata.asJson.printWith(Printer.noSpaces), "metadata.json")
 
   private def checksumToString(checksum: String): String =
     Option(checksum)
@@ -235,12 +250,14 @@ class FileProcessor(
       metadataChecksum: String,
       bagitTxtChecksum: String,
       manifestSha256Checksum: String,
-      potentialBagInfoChecksum: Option[String]
+      potentialBagInfoChecksum: Option[String],
+      bagInfoJsonChecksum: String
   ): IO[String] = {
     val tagManifestMap = Map(
       "metadata.json" -> metadataChecksum,
       "bagit.txt" -> bagitTxtChecksum,
-      "manifest-sha256.txt" -> manifestSha256Checksum
+      "manifest-sha256.txt" -> manifestSha256Checksum,
+      "bag-info.json" -> bagInfoJsonChecksum
     )
     val tagManifest = potentialBagInfoChecksum
       .map(cs => tagManifestMap + ("bag-info.txt" -> cs))
@@ -308,6 +325,19 @@ object FileProcessor {
           ("fileSize", Json.fromLong(fileSize))
         )
         .deepMerge(jsonFromMetadataObject(id, parentId, Option(title), File, name))
+  }
+  implicit val bagitInfoEncoder: Encoder[BagInfo] = {
+    case BagInfo(transferringBody, transferCompleteDatetime, upstreamSystem, digitalAssetSource, digitalAssetSubtype, idFields) =>
+      Json
+        .obj(
+          ("transferringBody", Json.fromString(transferringBody)),
+          ("transferCompleteDatetime", Json.fromString(transferCompleteDatetime.toString)),
+          ("upstreamSystem", Json.fromString(upstreamSystem)),
+          ("digitalAssetSource", Json.fromString(digitalAssetSource)),
+          ("digitalAssetSubtype", Json.fromString(digitalAssetSubtype))
+        )
+        .deepDropNullValues
+        .deepMerge(Json.fromFields(convertIdFieldsToJson(idFields)))
   }
 
   private def jsonFromMetadataObject(
@@ -377,6 +407,15 @@ object FileProcessor {
       name: String,
       fileSize: Long
   ) extends BagitMetadataObject
+
+  case class BagInfo(
+      transferringBody: String,
+      transferCompleteDatetime: OffsetDateTime,
+      upstreamSystem: String,
+      digitalAssetSource: String,
+      digitalAssetSubtype: String,
+      idFields: List[IdField] = Nil
+  )
 
   case class FileInfo(id: UUID, fileSize: Long, fileName: String, checksum: String)
 
