@@ -58,7 +58,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
   val testOutputBucket = "outputBucket"
   val inputBucket = "inputBucket"
   private def packageAvailable(s3Key: String): TREInput = TREInput(
-    TREInputParameters("status", "TEST-REFERENCE", skipSeriesLookup = false, inputBucket, s3Key)
+    TREInputParameters("TEST-REFERENCE", skipSeriesLookup = false, inputBucket, s3Key)
   )
   private def event(s3Key: String = "test.tar.gz"): SQSEvent = createEvent(
     packageAvailable(s3Key).asJson.printWith(Printer.noSpaces)
@@ -426,7 +426,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
 
   "the lambda" should "succeed even if the`skipSeriesLookup` parameter is missing from the 'parameters' json " in {
     val eventWithoutSkipParameter =
-      """{"parameters":{"status":"status","reference":"TEST-REFERENCE","s3Bucket":"inputBucket","s3Key":"test.tar.gz"}}"""
+      """{"parameters":{"reference":"TEST-REFERENCE","s3Bucket":"inputBucket","s3Key":"test.tar.gz"}}"""
     val event = createEvent(eventWithoutSkipParameter)
     stubAWSRequests(inputBucket)
 

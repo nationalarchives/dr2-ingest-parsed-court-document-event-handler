@@ -280,12 +280,11 @@ object FileProcessor {
   implicit val parserDecoder: Decoder[Parser] = deriveConfiguredDecoder
   implicit val inputParametersDecoder: Decoder[TREInputParameters] = (c: HCursor) =>
     for {
-      status <- c.downField("status").as[String]
       reference <- c.downField("reference").as[String]
       s3Bucket <- c.downField("s3Bucket").as[String]
       s3Key <- c.downField("s3Key").as[String]
       skipSeriesLookup <- c.getOrElse("skipSeriesLookup")(false)
-    } yield TREInputParameters(status, reference, skipSeriesLookup, s3Bucket, s3Key)
+    } yield TREInputParameters(reference, skipSeriesLookup, s3Bucket, s3Key)
   implicit val bagitMetadataEncoder: Encoder[BagitMetadataObject] = {
     case BagitFolderMetadataObject(id, parentId, title, name, folderMetadataIdFields) =>
       jsonFromMetadataObject(id, parentId, title, ArchiveFolder, name).deepMerge {
@@ -419,7 +418,7 @@ object FileProcessor {
 
   case class FileInfo(id: UUID, fileSize: Long, fileName: String, checksum: String)
 
-  case class TREInputParameters(status: String, reference: String, skipSeriesLookup: Boolean, s3Bucket: String, s3Key: String)
+  case class TREInputParameters(reference: String, skipSeriesLookup: Boolean, s3Bucket: String, s3Key: String)
 
   case class TREInput(parameters: TREInputParameters)
 
