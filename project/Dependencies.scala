@@ -25,5 +25,5 @@ object Dependencies {
   lazy val scalaTest = "org.scalatest" %% "scalatest" % "3.2.17"
   lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.30"
   lazy val wiremock = "com.github.tomakehurst" % "wiremock" % "3.0.1"
-  lazy val reactorTest = "io.projectreactor" % "reactor-test" % "3.6.0"
+  lazy val reactorTest = "io.projectreactor" % "reactor-test" % "3.6.1"
 }
