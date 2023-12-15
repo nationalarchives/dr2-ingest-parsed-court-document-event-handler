@@ -6,6 +6,7 @@ ThisBuild / scalaVersion := "2.13.12"
 
 lazy val root = (project in file(".")).settings(
   name := "dr2-ingest-parsed-court-document-event-handler",
+  resolvers += "s01-oss-sonatype-org-snapshots" at "https://s01.oss.sonatype.org/content/repositories/snapshots",
   libraryDependencies ++= Seq(
     commonsCompress,
     fs2IO,
@@ -20,7 +21,6 @@ lazy val root = (project in file(".")).settings(
     lambdaJavaEvents,
     pureConfig,
     pureConfigCats,
-    reactiveStreams,
     s3Client,
     sfnClient,
     mockito % Test,

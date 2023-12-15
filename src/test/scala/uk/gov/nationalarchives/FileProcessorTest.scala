@@ -2,7 +2,6 @@ package uk.gov.nationalarchives
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import fs2.interop.reactivestreams._
 import fs2.{Chunk, Stream, text}
 import io.circe.generic.auto._
 import io.circe.parser.decode
@@ -529,8 +528,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     val publisherMatcher =
       new ArgumentMatcher[Publisher[ByteBuffer]] {
         override def matches(argument: Publisher[ByteBuffer]): Boolean = {
-          val arg = argument
-            .toStreamBuffered[IO](1024)
+          val arg = argument.publisherToStream
             .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
             .through(text.utf8.decode)
             .compile
