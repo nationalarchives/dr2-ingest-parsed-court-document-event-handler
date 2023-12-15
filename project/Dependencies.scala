@@ -4,8 +4,8 @@ object Dependencies {
   lazy val pureConfigVersion = "0.17.4"
   lazy val daAwsClientsVersion = "0.1.34"
   private val fs2Version = "3.9.3-43-da2e1ce-SNAPSHOT"
-
   private val circeVersion = "0.14.6"
+
   lazy val circeCore = "io.circe" %% "circe-core" % circeVersion
   lazy val circeGeneric = "io.circe" %% "circe-generic" % circeVersion
   lazy val circeParser = "io.circe" %% "circe-parser" % circeVersion
