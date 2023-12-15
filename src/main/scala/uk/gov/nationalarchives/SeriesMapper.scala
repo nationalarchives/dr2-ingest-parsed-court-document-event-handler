@@ -41,6 +41,7 @@ object SeriesMapper {
   def apply(): SeriesMapper = new SeriesMapper(seriesMap)
 
   val seriesMap: Set[Court] = Set(
+    Court("EAT", "LE", "LE 10"),
     Court("EWCA", "J", "J 347"),
     Court("EWHC", "J", "J 348"),
     Court("EWCOP", "J", "J 349"),

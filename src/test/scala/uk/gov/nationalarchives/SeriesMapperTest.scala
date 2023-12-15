@@ -10,7 +10,7 @@ import uk.gov.nationalarchives.SeriesMapper.seriesMap
 class SeriesMapperTest extends AnyFlatSpec with MockitoSugar with TableDrivenPropertyChecks {
 
   "seriesMap" should "have 10 entries" in {
-    seriesMap.size should equal(10)
+    seriesMap.size should equal(11)
   }
 
   val courtToSeries: TableFor2[String, String] = Table(
