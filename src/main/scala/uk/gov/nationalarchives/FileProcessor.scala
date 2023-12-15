@@ -4,7 +4,6 @@ import cats.effect.IO
 import cats.effect.kernel.Resource
 import cats.implicits._
 import fs2.compression.Compression
-import fs2.interop.reactivestreams._
 import fs2.io._
 import fs2.{Chunk, Pipe, Stream, text}
 import io.circe.Json.Null
@@ -16,6 +15,7 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json, Printer}
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.reactivestreams.{FlowAdapters, Publisher}
 import uk.gov.nationalarchives.FileProcessor._
 import uk.gov.nationalarchives.UriProcessor.ParsedUri
 
@@ -35,7 +35,7 @@ class FileProcessor(
   def copyFilesFromDownloadToUploadBucket(downloadBucketKey: String): IO[Map[String, FileInfo]] = {
     s3.download(downloadBucket, downloadBucketKey)
       .flatMap(
-        _.toStreamBuffered[IO](10 * 1024)
+        _.publisherToStream
           .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
           .through(Compression[IO].gunzip())
           .flatMap(_.content)
@@ -49,8 +49,7 @@ class FileProcessor(
   def readJsonFromPackage(metadataId: UUID): IO[TREMetadata] = {
     for {
       s3Publisher <- s3.download(uploadBucket, metadataId.toString)
-      contentString <- s3Publisher
-        .toStreamBuffered[IO](chunkSize)
+      contentString <- s3Publisher.publisherToStream
         .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
         .through(extractMetadataFromJson)
         .compile
@@ -180,7 +179,6 @@ class FileProcessor(
       "FCL",
       bagInfoIdFields
     )
-
     uploadAsFile(bagInfo.asJson.printWith(Printer.noSpaces), "bag-info.json")
   }
 
@@ -205,7 +203,7 @@ class FileProcessor(
               Stream.eval[IO, (String, FileInfo)](
                 stream.chunks
                   .map(_.toByteBuffer)
-                  .toUnicastPublisher
+                  .toPublisherResource
                   .use(s3.upload(uploadBucket, id.toString, tarEntry.getSize, _))
                   .map { res =>
                     val checksum = checksumToString(res.response().checksumSHA256())
@@ -230,7 +228,7 @@ class FileProcessor(
     Stream
       .eval(IO(fileContent))
       .map(s => ByteBuffer.wrap(s.getBytes()))
-      .toUnicastPublisher
+      .toPublisherResource
       .use { pub =>
         s3.upload(uploadBucket, s"$consignmentRef/$key", fileContent.getBytes.length, pub)
       }
@@ -445,6 +443,17 @@ object FileProcessor {
   )
 
   case class TREMetadataParameters(PARSER: Parser, TRE: TREParams, TDR: TDRParams)
+
+  implicit class StreamToPublisher(stream: Stream[IO, ByteBuffer]) {
+    def toPublisherResource: Resource[IO, Publisher[ByteBuffer]] =
+      fs2.interop.flow.toPublisher(stream).map(pub => FlowAdapters.toPublisher[ByteBuffer](pub))
+  }
+
+  implicit class PublisherToStream(publisher: Publisher[ByteBuffer]) {
+    def publisherToStream: Stream[IO, ByteBuffer] = Stream.eval(IO.delay(publisher)).flatMap { publisher =>
+      fs2.interop.flow.fromPublisher[IO](FlowAdapters.toFlowPublisher(publisher), chunkSize = 16)
+    }
+  }
 
   case class Config(outputBucket: String, sfnArn: String)
 }
