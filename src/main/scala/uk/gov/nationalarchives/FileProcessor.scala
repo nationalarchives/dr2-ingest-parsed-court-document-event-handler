@@ -70,6 +70,7 @@ class FileProcessor(
       potentialJudgmentName: Option[String],
       potentialUri: Option[String],
       reference: String,
+      fileReference: Option[String],
       department: Option[String],
       series: Option[String]
   ): List[BagitMetadataObject] = {
@@ -91,7 +92,8 @@ class FileProcessor(
     val assetMetadataIdFields = List(
       Option(IdField("UpstreamSystemReference", reference)),
       potentialUri.map(uri => IdField("URI", uri)),
-      potentialCite.map(cite => IdField("NeutralCitation", cite))
+      potentialCite.map(cite => IdField("NeutralCitation", cite)),
+      fileReference.map(ref => IdField("BornDigitalRef", ref))
     ).flatten
     val fileTitle = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
     val folderId = uuidGenerator()
@@ -439,7 +441,8 @@ object FileProcessor {
       `Document-Checksum-sha256`: String,
       `Source-Organization`: String,
       `Internal-Sender-Identifier`: String,
-      `Consignment-Export-Datetime`: OffsetDateTime
+      `Consignment-Export-Datetime`: OffsetDateTime,
+      `File-Reference`: Option[String]
   )
 
   case class TREMetadataParameters(PARSER: Parser, TRE: TREParams, TDR: TDRParams)

@@ -286,7 +286,8 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
         tdrParams("Document-Checksum-sha256"),
         tdrParams("Source-Organization"),
         tdrParams("Internal-Sender-Identifier"),
-        OffsetDateTime.parse(tdrParams("Consignment-Export-Datetime"))
+        OffsetDateTime.parse(tdrParams("Consignment-Export-Datetime")),
+        Option("FileReference")
       )
     )
   )
@@ -295,6 +296,12 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     ("potentialCite", "idFields"),
     (None, Nil),
     (Option("cite"), List(IdField("Code", "cite"), IdField("Cite", "cite")))
+  )
+
+  val fileReferenceTable: TableFor2[Option[String], List[IdField]] = Table(
+    ("potentialFileReference", "idFields"),
+    (None, Nil),
+    (Option("fileReference"), List(IdField("BornDigitalRef", "fileReference")))
   )
 
   val urlDepartmentAndSeriesTable: TableFor6[Option[String], Option[String], Boolean, Option[ParsedUri], String, Boolean] = Table(
@@ -319,65 +326,67 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     (None, "fileName.txt", null, "fileName.txt"),
     (Option("Press Summary of test"), "Press Summary of test.txt", "test", "Press Summary of test.txt")
   )
-
-  forAll(citeTable) { (potentialCite, idFields) =>
-    forAll(treNameTable) { (treName, treFileName, expectedFolderTitle, expectedAssetTitle) =>
-      forAll(urlDepartmentAndSeriesTable) { (department, series, _, parsedUri, expectedFolderName, titleExpected) =>
-        val updatedIdFields =
-          if (potentialCite.isDefined && expectedFolderName == trimmedUri) idFields :+ IdField("URI", trimmedUri)
-          else idFields
-        "createBagitMetadataObjects" should s"generate the correct bagit Metadata with $expectedFolderTitle, $expectedAssetTitle and $updatedIdFields" +
-          s"for $department, $series, $parsedUri and TRE name $treName" in {
-            val fileId = UUID.randomUUID()
-            val metadataId = UUID.randomUUID()
-            val folderId = uuids.head
-            val assetId = uuids.last
-            val fileName = treFileName.split("\\.").dropRight(1).mkString(".")
-            val folderTitle = if (titleExpected) Option(expectedFolderTitle) else None
-            val folder =
-              BagitFolderMetadataObject(folderId, None, folderTitle, expectedFolderName, updatedIdFields)
-            val asset =
-              BagitAssetMetadataObject(
-                assetId,
-                Option(folderId),
-                expectedAssetTitle,
-                expectedAssetTitle,
-                List(fileId),
-                List(metadataId),
-                treName,
-                List(
-                  Option(IdField("UpstreamSystemReference", reference)),
-                  potentialUri.map(uri => IdField("URI", uri)),
-                  potentialCite.map(cite => IdField("NeutralCitation", cite))
-                ).flatten
-              )
-            val files = List(
-              BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, treFileName, 1),
-              BagitFileMetadataObject(metadataId, Option(assetId), "", 2, "metadataFileName.txt", 2)
-            )
-            val expectedBagitMetadataObjects: List[BagitMetadataObject] = List(folder, asset) ++ files
-
-            val fileProcessor =
-              new FileProcessor("download", "upload", "ref", mock[DAS3Client[IO]], UUIDGenerator().uuidGenerator)
-            val fileInfo = FileInfo(fileId, 1, treFileName, "fileChecksum")
-            val metadataFileInfo = FileInfo(metadataId, 2, "metadataFileName.txt", "metadataChecksum")
-
-            val bagitMetadataObjects =
-              fileProcessor
-                .createBagitMetadataObjects(
-                  fileInfo,
-                  metadataFileInfo,
-                  parsedUri,
-                  potentialCite,
+  forAll(fileReferenceTable) { (potentialFileReference, bornDigitalRefIdFields) =>
+    forAll(citeTable) { (potentialCite, idFields) =>
+      forAll(treNameTable) { (treName, treFileName, expectedFolderTitle, expectedAssetTitle) =>
+        forAll(urlDepartmentAndSeriesTable) { (department, series, _, parsedUri, expectedFolderName, titleExpected) =>
+          val updatedIdFields =
+            if (potentialCite.isDefined && expectedFolderName == trimmedUri) idFields :+ IdField("URI", trimmedUri)
+            else idFields
+          "createBagitMetadataObjects" should s"generate the correct bagit Metadata with $potentialFileReference $expectedFolderTitle, $expectedAssetTitle and $updatedIdFields" +
+            s"for $department, $series, $parsedUri and TRE name $treName" in {
+              val fileId = UUID.randomUUID()
+              val metadataId = UUID.randomUUID()
+              val folderId = uuids.head
+              val assetId = uuids.last
+              val fileName = treFileName.split("\\.").dropRight(1).mkString(".")
+              val folderTitle = if (titleExpected) Option(expectedFolderTitle) else None
+              val folder =
+                BagitFolderMetadataObject(folderId, None, folderTitle, expectedFolderName, updatedIdFields)
+              val asset =
+                BagitAssetMetadataObject(
+                  assetId,
+                  Option(folderId),
+                  expectedAssetTitle,
+                  expectedAssetTitle,
+                  List(fileId),
+                  List(metadataId),
                   treName,
-                  potentialUri,
-                  reference,
-                  department,
-                  series
+                  List(
+                    Option(IdField("UpstreamSystemReference", reference)),
+                    potentialUri.map(uri => IdField("URI", uri)),
+                    potentialCite.map(cite => IdField("NeutralCitation", cite))
+                  ).flatten ++ bornDigitalRefIdFields
                 )
+              val files = List(
+                BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, treFileName, 1),
+                BagitFileMetadataObject(metadataId, Option(assetId), "", 2, "metadataFileName.txt", 2)
+              )
+              val expectedBagitMetadataObjects: List[BagitMetadataObject] = List(folder, asset) ++ files
 
-            bagitMetadataObjects should equal(expectedBagitMetadataObjects)
-          }
+              val fileProcessor =
+                new FileProcessor("download", "upload", "ref", mock[DAS3Client[IO]], UUIDGenerator().uuidGenerator)
+              val fileInfo = FileInfo(fileId, 1, treFileName, "fileChecksum")
+              val metadataFileInfo = FileInfo(metadataId, 2, "metadataFileName.txt", "metadataChecksum")
+
+              val bagitMetadataObjects =
+                fileProcessor
+                  .createBagitMetadataObjects(
+                    fileInfo,
+                    metadataFileInfo,
+                    parsedUri,
+                    potentialCite,
+                    treName,
+                    potentialUri,
+                    reference,
+                    potentialFileReference,
+                    department,
+                    series
+                  )
+
+              bagitMetadataObjects should equal(expectedBagitMetadataObjects)
+            }
+        }
       }
     }
   }
@@ -423,11 +432,11 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
 
             val bagitTxtContent =
               """BagIt-Version: 1.0
-            |Tag-File-Character-Encoding: UTF-8""".stripMargin
+              |Tag-File-Character-Encoding: UTF-8""".stripMargin
 
             val manifestString =
               s"""fileChecksum data/$fileId
-             |metadataChecksum data/$metadataId""".stripMargin
+               |metadataChecksum data/$metadataId""".stripMargin
 
             val bagInfoJson = BagInfo(
               treMetadata.parameters.TDR.`Source-Organization`,

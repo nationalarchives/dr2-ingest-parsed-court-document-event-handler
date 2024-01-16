@@ -63,6 +63,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           potentialJudgmentName,
           potentialUri,
           treMetadata.parameters.TRE.reference,
+          treMetadata.parameters.TDR.`File-Reference`,
           output.department,
           output.series
         )
