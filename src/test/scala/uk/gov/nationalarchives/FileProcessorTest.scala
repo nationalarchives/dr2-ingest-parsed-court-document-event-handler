@@ -12,7 +12,7 @@ import org.mockito.{ArgumentMatcher, ArgumentMatchers, MockitoSugar}
 import org.reactivestreams.Publisher
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
-import org.scalatest.prop.{TableDrivenPropertyChecks, TableFor2, TableFor4, TableFor6}
+import org.scalatest.prop.{TableDrivenPropertyChecks, TableFor1, TableFor2, TableFor4, TableFor6}
 import reactor.core.publisher.Flux
 import software.amazon.awssdk.services.s3.model.PutObjectResponse
 import software.amazon.awssdk.transfer.s3.model.CompletedUpload
@@ -298,10 +298,10 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     (Option("cite"), List(IdField("Code", "cite"), IdField("Cite", "cite")))
   )
 
-  val fileReferenceTable: TableFor2[Option[String], List[IdField]] = Table(
-    ("potentialFileReference", "idFields"),
-    (None, Nil),
-    (Option("fileReference"), List(IdField("BornDigitalRef", "fileReference")))
+  val fileReferenceTable: TableFor1[Option[String]] = Table(
+    "potentialFileReference",
+    None,
+    Option("fileReference")
   )
 
   val urlDepartmentAndSeriesTable: TableFor6[Option[String], Option[String], Boolean, Option[ParsedUri], String, Boolean] = Table(
@@ -326,7 +326,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     (None, "fileName.txt", null, "fileName.txt"),
     (Option("Press Summary of test"), "Press Summary of test.txt", "test", "Press Summary of test.txt")
   )
-  forAll(fileReferenceTable) { (potentialFileReference, bornDigitalRefIdFields) =>
+  forAll(fileReferenceTable) { potentialFileReference =>
     forAll(citeTable) { (potentialCite, idFields) =>
       forAll(treNameTable) { (treName, treFileName, expectedFolderTitle, expectedAssetTitle) =>
         forAll(urlDepartmentAndSeriesTable) { (department, series, _, parsedUri, expectedFolderName, titleExpected) =>
@@ -355,8 +355,9 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
                   List(
                     Option(IdField("UpstreamSystemReference", reference)),
                     potentialUri.map(uri => IdField("URI", uri)),
-                    potentialCite.map(cite => IdField("NeutralCitation", cite))
-                  ).flatten ++ bornDigitalRefIdFields
+                    potentialCite.map(cite => IdField("NeutralCitation", cite)),
+                    potentialFileReference.map(fileReference => IdField("BornDigitalRef", fileReference))
+                  ).flatten
                 )
               val files = List(
                 BagitFileMetadataObject(fileId, Option(assetId), fileName, 1, treFileName, 1),
