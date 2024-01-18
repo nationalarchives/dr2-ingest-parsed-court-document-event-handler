@@ -86,9 +86,13 @@ class FileProcessor(
           List(IdField("URI", parsedUri.get.uriWithoutDocType))
         )
 
-    val folderMetadataIdFields = potentialCite
-      .map(cite => List(IdField("Code", cite), IdField("Cite", cite)) ++ uriIdField)
+    val folderMetadataIdFields = department
+      .flatMap { _ =>
+        potentialCite
+          .map(cite => List(IdField("Code", cite), IdField("Cite", cite)) ++ uriIdField)
+      }
       .getOrElse(Nil)
+
     val assetMetadataIdFields = List(
       Option(IdField("UpstreamSystemReference", potentialFileReference)),
       potentialUri.map(uri => IdField("URI", uri)),

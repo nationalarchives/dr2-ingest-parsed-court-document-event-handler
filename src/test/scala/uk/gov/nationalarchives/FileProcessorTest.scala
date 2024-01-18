@@ -330,10 +330,15 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
     forAll(citeTable) { (potentialCite, idFields) =>
       forAll(treNameTable) { (treName, treFileName, expectedFolderTitle, expectedAssetTitle) =>
         forAll(urlDepartmentAndSeriesTable) { (department, series, _, parsedUri, expectedFolderName, titleExpected) =>
-          val updatedIdFields =
-            if (potentialCite.isDefined && expectedFolderName == trimmedUri) idFields :+ IdField("URI", trimmedUri)
-            else idFields
-          "createBagitMetadataObjects" should s"generate the correct bagit Metadata with $potentialFileReference $expectedFolderTitle, $expectedAssetTitle and $updatedIdFields" +
+          val updatedIdFields = {
+            if (department.isEmpty) {
+              Nil
+            } else {
+              if (potentialCite.isDefined && expectedFolderName == trimmedUri) idFields :+ IdField("URI", trimmedUri)
+              else idFields
+            }
+          }
+          "createBagitMetadataObjects" should s"generate the correct bagit Metadata with $potentialCite, $potentialFileReference $expectedFolderTitle, $expectedAssetTitle and $updatedIdFields" +
             s"for $department, $series, $parsedUri and TRE name $treName" in {
               val fileId = UUID.randomUUID()
               val metadataId = UUID.randomUUID()
