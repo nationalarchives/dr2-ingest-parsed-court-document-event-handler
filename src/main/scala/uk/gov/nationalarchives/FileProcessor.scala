@@ -71,12 +71,12 @@ class FileProcessor(
       potentialUri: Option[String],
       potentialFileReference: String,
       fileReference: Option[String],
-      department: Option[String],
-      series: Option[String]
+      potentialDepartment: Option[String],
+      potentialSeries: Option[String]
   ): List[BagitMetadataObject] = {
     val potentialCourtFromUri = parsedUri.flatMap(_.potentialCourt)
     val (folderName, potentialFolderTitle, uriIdField) =
-      if (department.flatMap(_ => series).isEmpty && potentialCourtFromUri.isDefined)
+      if (potentialDepartment.flatMap(_ => potentialSeries).isEmpty && potentialCourtFromUri.isDefined)
         ("Court Documents (court not matched)", None, Nil)
       else if (potentialCourtFromUri.isEmpty) ("Court Documents (court unknown)", None, Nil)
       else
@@ -86,7 +86,7 @@ class FileProcessor(
           List(IdField("URI", parsedUri.get.uriWithoutDocType))
         )
 
-    val folderMetadataIdFields = department
+    val folderMetadataIdFields = potentialDepartment
       .flatMap { _ =>
         potentialCite
           .map(cite => List(IdField("Code", cite), IdField("Cite", cite)) ++ uriIdField)
