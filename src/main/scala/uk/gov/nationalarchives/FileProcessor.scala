@@ -210,7 +210,7 @@ class FileProcessor(
                 stream.chunks
                   .map(_.toByteBuffer)
                   .toPublisherResource
-                  .use(s3.upload(uploadBucket, id.toString, tarEntry.getSize, _))
+                  .use(pub => s3.upload(uploadBucket, id.toString, tarEntry.getSize, FlowAdapters.toPublisher(pub)))
                   .map { res =>
                     val checksum = checksumToString(res.response().checksumSHA256())
                     tarEntry.getName -> FileInfo(id, tarEntry.getSize, tarEntry.getName.split("/").last, checksum)
@@ -236,7 +236,7 @@ class FileProcessor(
       .map(s => ByteBuffer.wrap(s.getBytes()))
       .toPublisherResource
       .use { pub =>
-        s3.upload(uploadBucket, s"$consignmentRef/$key", fileContent.getBytes.length, pub)
+        s3.upload(uploadBucket, s"$consignmentRef/$key", fileContent.getBytes.length, FlowAdapters.toPublisher(pub))
       }
       .map(_.response().checksumSHA256())
       .map(checksumToString)
@@ -450,11 +450,6 @@ object FileProcessor {
   )
 
   case class TREMetadataParameters(PARSER: Parser, TRE: TREParams, TDR: TDRParams)
-
-  implicit class StreamToPublisher(stream: Stream[IO, ByteBuffer]) {
-    def toPublisherResource: Resource[IO, Publisher[ByteBuffer]] =
-      fs2.interop.flow.toPublisher(stream).map(pub => FlowAdapters.toPublisher[ByteBuffer](pub))
-  }
 
   implicit class PublisherToStream(publisher: Publisher[ByteBuffer]) {
     def publisherToStream: Stream[IO, ByteBuffer] = Stream.eval(IO.delay(publisher)).flatMap { publisher =>
