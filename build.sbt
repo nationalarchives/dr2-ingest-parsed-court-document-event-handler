@@ -17,6 +17,8 @@ lazy val root = (project in file(".")).settings(
     log4jSlf4j,
     log4jCore,
     log4jTemplateJson,
+    log4CatsCore,
+    log4CatsSlf4j,
     lambdaCore,
     lambdaJavaEvents,
     pureConfig,
@@ -31,7 +33,7 @@ lazy val root = (project in file(".")).settings(
 )
 (assembly / assemblyJarName) := "dr2-ingest-parsed-court-document-event-handler.jar"
 
-scalacOptions ++= Seq("-Wunused:imports", "-Werror")
+scalacOptions ++= Seq("-Wunused:imports", "-Werror", "-deprecation")
 
 (Test / fork) := true
 (Test / envVars) := Map("AWS_ACCESS_KEY_ID" -> "accesskey", "AWS_SECRET_ACCESS_KEY" -> "secret")

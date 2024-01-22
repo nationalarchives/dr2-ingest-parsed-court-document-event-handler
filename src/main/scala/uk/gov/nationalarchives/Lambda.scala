@@ -11,6 +11,9 @@ import pureconfig.generic.auto._
 import pureconfig.module.catseffect.syntax._
 import uk.gov.nationalarchives.FileProcessor._
 import io.circe.parser.decode
+import org.typelevel.log4cats.SelfAwareStructuredLogger
+import org.typelevel.log4cats.slf4j._
+
 import java.util.UUID
 import scala.jdk.CollectionConverters._
 
@@ -20,19 +23,25 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
   val randomUuidGenerator: () => UUID = () => UUID.randomUUID
   val seriesMapper: SeriesMapper = SeriesMapper()
 
+  private val logger: SelfAwareStructuredLogger[IO] = Slf4jFactory.create[IO].getLogger
+
   override def handleRequest(input: SQSEvent, context: Context): Unit = {
     input.getRecords.asScala.toList.map { record =>
       for {
         treInput <- IO.fromEither(decode[TREInput](record.getBody))
         batchRef = treInput.parameters.reference
+        logCtx = Map("batchRef" -> batchRef)
+        _ <- logger.info(logCtx)(s"Processing batchRef $batchRef")
+
         config <- ConfigSource.default.loadF[IO, Config]()
         outputBucket = config.outputBucket
         fileProcessor = new FileProcessor(treInput.parameters.s3Bucket, outputBucket, batchRef, s3, randomUuidGenerator)
         fileNameToFileInfo <- fileProcessor.copyFilesFromDownloadToUploadBucket(treInput.parameters.s3Key)
+        _ <- logger.info(logCtx)(s"Copied ${treInput.parameters.s3Key} from ${treInput.parameters.s3Bucket} to $outputBucket")
+
         metadataFileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$batchRef/TRE-$batchRef-metadata.json"))(
           new RuntimeException(s"Cannot find metadata for $batchRef")
         )
-
         treMetadata <- fileProcessor.readJsonFromPackage(metadataFileInfo.id)
         potentialUri = treMetadata.parameters.PARSER.uri
         potentialJudgmentName = treMetadata.parameters.PARSER.name
@@ -42,6 +51,8 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         parsedUri <- uriProcessor.getCourtAndUriWithoutDocType
         payload = treMetadata.parameters.TRE.payload
         potentialCite = treMetadata.parameters.PARSER.cite
+        fileReference = treMetadata.parameters.TDR.`File-Reference`
+        logWithFileRef = logger.info(logCtx ++ Map("fileReference" -> fileReference.orNull))(_)
 
         fileInfo <- IO.fromOption(fileNameToFileInfo.get(s"$batchRef/${payload.filename}"))(
           new RuntimeException(s"Document not found for file belonging to $batchRef")
@@ -63,7 +74,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           potentialJudgmentName,
           potentialUri,
           treMetadata.parameters.TRE.reference,
-          treMetadata.parameters.TDR.`File-Reference`,
+          fileReference,
           output.department,
           output.series
         )
@@ -75,13 +86,23 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           output.department,
           output.series
         )
+        _ <- logWithFileRef(s"Copied bagit files to $outputBucket")
 
         _ <- s3.copy(outputBucket, fileInfo.id.toString, outputBucket, s"$batchRef/data/${fileInfo.id}")
+        _ <- logWithFileRef(s"Copied file with id ${fileInfo.id} to data directory")
+
         _ <- s3
           .copy(outputBucket, metadataFileInfo.id.toString, outputBucket, s"$batchRef/data/${metadataFileInfo.id}")
+        _ <- logWithFileRef(s"Copied metadata file with id ${metadataFileInfo.id} to data directory")
+
         _ <- s3.deleteObjects(outputBucket, fileNameToFileInfo.values.map(_.id.toString).toList)
+        _ <- logWithFileRef("Deleted objects from the root of S3")
+
         _ <- sfn.startExecution(config.sfnArn, output, Option(s"$batchRef-${randomUuidGenerator()}"))
+        _ <- logWithFileRef("Started step function execution")
       } yield ()
     }.sequence
-  }.unsafeRunSync()
+  }.onError(logLambdaError).unsafeRunSync()
+
+  private def logLambdaError(error: Throwable): IO[Unit] = logger.error(error)("Error running court document event handler")
 }
