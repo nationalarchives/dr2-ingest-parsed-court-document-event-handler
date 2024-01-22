@@ -11,7 +11,7 @@ import pureconfig.generic.auto._
 import pureconfig.module.catseffect.syntax._
 import uk.gov.nationalarchives.FileProcessor._
 import io.circe.parser.decode
-import org.typelevel.log4cats.SelfAwareStructuredLogger
+import org.typelevel.log4cats.{LoggerName, SelfAwareStructuredLogger}
 import org.typelevel.log4cats.slf4j._
 
 import java.util.UUID
@@ -23,6 +23,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
   val randomUuidGenerator: () => UUID = () => UUID.randomUUID
   val seriesMapper: SeriesMapper = SeriesMapper()
 
+  implicit val loggerName: LoggerName = LoggerName("Ingest Parsed Court Document Event Handler")
   private val logger: SelfAwareStructuredLogger[IO] = Slf4jFactory.create[IO].getLogger
 
   override def handleRequest(input: SQSEvent, context: Context): Unit = {
