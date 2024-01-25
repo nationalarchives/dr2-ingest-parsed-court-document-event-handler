@@ -302,7 +302,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
     val input = read[Output](sfnRequest.input)
 
     sfnRequest.stateMachineArn should equal("arn:aws:states:eu-west-2:123456789:stateMachine:StateMachineName")
-    sfnRequest.name should equal(s"TEST-REFERENCE-${uuidsAndChecksum(4)._1}")
+    sfnRequest.name should equal("TEST-REFERENCE")
 
     input.series.get should equal("TEST SERIES")
     input.department.get should equal("TEST")
@@ -332,7 +332,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
       val input = read[Output](sfnRequest.input)
 
       sfnRequest.stateMachineArn should equal("arn:aws:states:eu-west-2:123456789:stateMachine:StateMachineName")
-      sfnRequest.name should equal(s"TEST-REFERENCE-${uuidsAndChecksum(4)._1}")
+      sfnRequest.name should equal("TEST-REFERENCE")
 
       input.series should equal(expectedSeries)
       input.department should equal(expectedDepartment)
