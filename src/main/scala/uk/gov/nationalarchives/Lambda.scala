@@ -99,7 +99,7 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
         _ <- s3.deleteObjects(outputBucket, fileNameToFileInfo.values.map(_.id.toString).toList)
         _ <- logWithFileRef("Deleted objects from the root of S3")
 
-        _ <- sfn.startExecution(config.sfnArn, output, Option(s"$batchRef-${randomUuidGenerator()}"))
+        _ <- sfn.startExecution(config.sfnArn, output, Option(batchRef))
         _ <- logWithFileRef("Started step function execution")
       } yield ()
     }.sequence
