@@ -42,7 +42,7 @@ class SeriesMapperTest extends AnyFlatSpec with MockitoSugar with TableDrivenPro
     val ex = intercept[Exception] {
       seriesMapper.createOutput("upload", "batch", Option("invalidCourt"), skipSeriesLookup = false).unsafeRunSync()
     }
-    val expectedMessage = s"Cannot find series and department for court"
+    val expectedMessage = s"Cannot find series and department for court invalidCourt"
     ex.getMessage should equal(expectedMessage)
   }
 
