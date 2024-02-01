@@ -15,7 +15,7 @@ class SeriesMapper(validCourts: Set[Court]) {
         val potentiallyFoundCourt: Option[Court] = validCourts.find(_.code == court.toUpperCase)
         potentiallyFoundCourt match {
           case None if skipSeriesLookup => IO(Output(batchId, uploadBucket, s"$batchId/", None, None))
-          case None                     => IO.raiseError(new Exception("Cannot find series and department for court"))
+          case None => IO.raiseError(new Exception(s"Cannot find series and department for court $court for batchId $batchId"))
           case _ =>
             IO(
               Output(batchId, uploadBucket, s"$batchId/", potentiallyFoundCourt.map(_.dept), potentiallyFoundCourt.map(_.series))
