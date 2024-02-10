@@ -16,7 +16,7 @@ object Dependencies {
   lazy val log4jSlf4j = "org.apache.logging.log4j" % "log4j-slf4j-impl" % logbackVersion
   lazy val log4jCore = "org.apache.logging.log4j" % "log4j-core" % logbackVersion
   lazy val log4jTemplateJson = "org.apache.logging.log4j" % "log4j-layout-template-json" % logbackVersion
-  lazy val log4CatsCore= "org.typelevel" %% "log4cats-core" % log4CatsVersion;
+  lazy val log4CatsCore = "org.typelevel" %% "log4cats-core" % log4CatsVersion;
   lazy val log4CatsSlf4j = "org.typelevel" %% "log4cats-slf4j" % log4CatsVersion
   lazy val lambdaCore = "com.amazonaws" % "aws-lambda-java-core" % "1.2.3"
   lazy val lambdaJavaEvents = "com.amazonaws" % "aws-lambda-java-events" % "3.11.4"
@@ -25,7 +25,7 @@ object Dependencies {
   lazy val commonsCompress = "org.apache.commons" % "commons-compress" % "1.25.0"
   lazy val fs2IO = "co.fs2" %% "fs2-io" % fs2Version
   lazy val upickle = "com.lihaoyi" %% "upickle" % "3.1.3"
-  lazy val scalaTest = "org.scalatest" %% "scalatest" % "3.2.17"
+  lazy val scalaTest = "org.scalatest" %% "scalatest" % "3.2.18"
   lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.30"
   lazy val wiremock = "com.github.tomakehurst" % "wiremock" % "3.0.1"
   lazy val reactorTest = "io.projectreactor" % "reactor-test" % "3.6.2"
