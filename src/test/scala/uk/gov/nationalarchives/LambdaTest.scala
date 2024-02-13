@@ -394,11 +394,12 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
   "the lambda" should "error if the json in the metadata file has a field with a non-optional value that is null" in {
     stubAWSRequests(
       inputBucket,
-      metadataJsonOpt =
-        Option(s"""{"parameters":{"TDR": {"Document-Checksum-sha256": null, "Source-Organization": "test-organisation",
+      metadataJsonOpt = Option(
+        s"""{"parameters":{"TDR": {"Document-Checksum-sha256": null, "Source-Organization": "test-organisation", "UUID": "24190792-a2e5-43a0-a9e9-6a0580905d90",
          |"Internal-Sender-Identifier": "test-identifier", "Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
          |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
-         |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin)
+         |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
+      )
     )
     val ex = intercept[Exception] {
       IngestParserTest().handleRequest(event(), null)
