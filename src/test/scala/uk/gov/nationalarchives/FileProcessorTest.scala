@@ -18,7 +18,6 @@ import software.amazon.awssdk.services.s3.model.PutObjectResponse
 import software.amazon.awssdk.transfer.s3.model.CompletedUpload
 import uk.gov.nationalarchives.FileProcessor._
 import uk.gov.nationalarchives.UriProcessor.ParsedUri
-
 import java.nio.ByteBuffer
 import java.time.OffsetDateTime
 import java.util.{Base64, HexFormat, UUID}
@@ -40,18 +39,18 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
       }
     }
 
-  val metadataJson: String =
-    s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde", "Source-Organization": "test-organisation",
-       | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z", "UUID": "24190792-a2e5-43a0-a9e9-6a0580905d90"},
-       |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
-       |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
-
   private val tdrParams = Map(
     "Document-Checksum-sha256" -> "abcde",
     "Source-Organization" -> "test-organisation",
     "Internal-Sender-Identifier" -> "test-identifier",
-    "Consignment-Export-Datetime" -> "2023-10-31T13:40:54Z"
+    "Consignment-Export-Datetime" -> "2023-10-31T13:40:54Z",
+    "UUID" -> "24190792-a2e5-43a0-a9e9-6a0580905d90"
   )
+
+  val metadataJson: String =
+    s"""{"parameters":{"TDR": ${tdrParams.asJson.printWith(Printer.noSpaces)},
+       |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
+       |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
 
   private val uuids: List[UUID] = List(
     UUID.fromString("6e827e19-6a33-46c3-8730-b242c203d8c1"),

@@ -24,7 +24,6 @@ object Dependencies {
   lazy val sfnClient = "uk.gov.nationalarchives" %% "da-sfn-client" % daAwsClientsVersion
   lazy val commonsCompress = "org.apache.commons" % "commons-compress" % "1.25.0"
   lazy val fs2IO = "co.fs2" %% "fs2-io" % fs2Version
-  lazy val upickle = "com.lihaoyi" %% "upickle" % "3.1.3"
   lazy val scalaTest = "org.scalatest" %% "scalatest" % "3.2.18"
   lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.30"
   lazy val wiremock = "com.github.tomakehurst" % "wiremock" % "3.0.1"
