@@ -136,7 +136,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
 
     val metadataJson: String = metadataJsonOpt.getOrElse(
       s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde", "Source-Organization": "test-organisation",
-         | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
+         | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z", "UUID": "24190792-a2e5-43a0-a9e9-6a0580905d90"},
          |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
          |"PARSER":{"cite":"cite","uri":"https://example.com/id/court/2023/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
     )
@@ -211,7 +211,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
     "the lambda" should s"write the correct metadata files to S3 with a cite ${potentialCite.orNull}" in {
       val metadataJson: String =
         s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde", "Source-Organization": "test-organisation",
-           | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
+           | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z", "UUID": "24190792-a2e5-43a0-a9e9-6a0580905d90"},
            |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
            |"PARSER":{"cite":${potentialCite.orNull},"uri":"https://example.com/id/court/2023/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
       stubAWSRequests(inputBucket, metadataJsonOpt = Option(metadataJson))
@@ -236,14 +236,15 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
         assetId,
         Option(folderId),
         "Test.docx",
-        "Test.docx",
+        "24190792-a2e5-43a0-a9e9-6a0580905d90",
         List(fileId),
         List(metadataFileId),
         Some("test"),
         List(
           Option(IdField("UpstreamSystemReference", reference)),
           Option(IdField("URI", "https://example.com/id/court/2023/")),
-          potentialCite.map(_ => IdField("NeutralCitation", "cite"))
+          potentialCite.map(_ => IdField("NeutralCitation", "cite")),
+          Option(IdField("RecordID", "24190792-a2e5-43a0-a9e9-6a0580905d90"))
         ).flatten
       )
       val expectedBagitTxt = "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8"
@@ -324,7 +325,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
       val inputJson =
         s"""{"parameters":{
            |"TDR": {"Document-Checksum-sha256": "abcde", "Source-Organization": "test-organisation",
-           | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
+           | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z", "UUID": "24190792-a2e5-43a0-a9e9-6a0580905d90"},
            |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
            |"PARSER":{"cite": ${cite.orNull}, "uri":${uri.orNull},"name":"test"}}}""".stripMargin
 
@@ -355,7 +356,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
   "the lambda" should "error if the uri contains '/press-summary' but file name does not contain 'Press Summary of'" in {
     val metadataJson: String =
       s"""{"parameters":{"TDR": {"Document-Checksum-sha256": "abcde", "Source-Organization": "test-organisation",
-         | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
+         | "Internal-Sender-Identifier": "test-identifier","Consignment-Export-Datetime": "2023-10-31T13:40:54Z", "UUID": "24190792-a2e5-43a0-a9e9-6a0580905d90"},
          |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
          |"PARSER":{"cite":"cite","uri":"https://example.com/id/court/press-summary/3/","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
 
@@ -393,11 +394,12 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
   "the lambda" should "error if the json in the metadata file has a field with a non-optional value that is null" in {
     stubAWSRequests(
       inputBucket,
-      metadataJsonOpt =
-        Option(s"""{"parameters":{"TDR": {"Document-Checksum-sha256": null, "Source-Organization": "test-organisation",
+      metadataJsonOpt = Option(
+        s"""{"parameters":{"TDR": {"Document-Checksum-sha256": null, "Source-Organization": "test-organisation", "UUID": "24190792-a2e5-43a0-a9e9-6a0580905d90",
          |"Internal-Sender-Identifier": "test-identifier", "Consignment-Export-Datetime": "2023-10-31T13:40:54Z"},
          |"TRE":{"reference":"$reference","payload":{"filename":"Test.docx"}},
-         |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin)
+         |"PARSER":{"cite":"cite","uri":"https://example.com","court":"test","date":"2023-07-26","name":"test"}}}""".stripMargin
+      )
     )
     val ex = intercept[Exception] {
       IngestParserTest().handleRequest(event(), null)

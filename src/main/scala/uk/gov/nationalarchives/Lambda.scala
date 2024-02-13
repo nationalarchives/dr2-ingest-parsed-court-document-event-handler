@@ -77,7 +77,8 @@ class Lambda extends RequestHandler[SQSEvent, Unit] {
           treMetadata.parameters.TRE.reference,
           fileReference,
           output.department,
-          output.series
+          output.series,
+          treMetadata.parameters.TDR.`UUID`.toString
         )
         _ <- fileProcessor.createBagitFiles(
           bagitMetadata,

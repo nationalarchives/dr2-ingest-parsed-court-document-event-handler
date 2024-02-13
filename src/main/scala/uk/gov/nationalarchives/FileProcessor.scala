@@ -72,7 +72,8 @@ class FileProcessor(
       potentialFileReference: String,
       fileReference: Option[String],
       potentialDepartment: Option[String],
-      potentialSeries: Option[String]
+      potentialSeries: Option[String],
+      tdrUuid: String
   ): List[BagitMetadataObject] = {
     val potentialCourtFromUri = parsedUri.flatMap(_.potentialCourt)
     val (folderName, potentialFolderTitle, uriIdField) =
@@ -97,7 +98,8 @@ class FileProcessor(
       Option(IdField("UpstreamSystemReference", potentialFileReference)),
       potentialUri.map(uri => IdField("URI", uri)),
       potentialCite.map(cite => IdField("NeutralCitation", cite)),
-      fileReference.map(ref => IdField("BornDigitalRef", ref))
+      fileReference.map(ref => IdField("BornDigitalRef", ref)),
+      Option(IdField("RecordID", tdrUuid))
     ).flatten
     val fileTitle = fileInfo.fileName.split("\\.").dropRight(1).mkString(".")
     val folderId = uuidGenerator()
@@ -108,7 +110,7 @@ class FileProcessor(
         assetId,
         Option(folderId),
         fileInfo.fileName,
-        fileInfo.fileName,
+        tdrUuid,
         List(fileInfo.id),
         List(metadataFileInfo.id),
         potentialJudgmentName,
@@ -446,7 +448,8 @@ object FileProcessor {
       `Source-Organization`: String,
       `Internal-Sender-Identifier`: String,
       `Consignment-Export-Datetime`: OffsetDateTime,
-      `File-Reference`: Option[String]
+      `File-Reference`: Option[String],
+      `UUID`: UUID
   )
 
   case class TREMetadataParameters(PARSER: Parser, TRE: TREParams, TDR: TDRParams)
