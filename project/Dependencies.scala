@@ -22,7 +22,7 @@ object Dependencies {
   lazy val lambdaJavaEvents = "com.amazonaws" % "aws-lambda-java-events" % "3.11.4"
   lazy val s3Client = "uk.gov.nationalarchives" %% "da-s3-client" % daAwsClientsVersion
   lazy val sfnClient = "uk.gov.nationalarchives" %% "da-sfn-client" % daAwsClientsVersion
-  lazy val commonsCompress = "org.apache.commons" % "commons-compress" % "1.25.0"
+  lazy val commonsCompress = "org.apache.commons" % "commons-compress" % "1.26.0"
   lazy val fs2IO = "co.fs2" %% "fs2-io" % fs2Version
   lazy val scalaTest = "org.scalatest" %% "scalatest" % "3.2.18"
   lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.30"
