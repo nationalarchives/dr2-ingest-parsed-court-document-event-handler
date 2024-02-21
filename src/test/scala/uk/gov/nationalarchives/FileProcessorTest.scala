@@ -334,6 +334,7 @@ class FileProcessorTest extends AnyFlatSpec with MockitoSugar with TableDrivenPr
           val updatedIdFields =
             if (department.isEmpty) Nil
             else if (potentialCite.isDefined && expectedFolderName == trimmedUri) idFields :+ IdField("URI", trimmedUri)
+            else if (potentialCite.isEmpty && expectedFolderName == trimmedUri) List(IdField("URI", trimmedUri))
             else idFields
 
           "createBagitMetadataObjects" should s"generate the correct bagit Metadata with $potentialCite, $potentialFileReference $expectedFolderTitle, $expectedAssetTitle and $updatedIdFields" +

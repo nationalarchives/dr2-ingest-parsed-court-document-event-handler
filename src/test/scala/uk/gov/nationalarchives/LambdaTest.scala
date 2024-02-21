@@ -203,7 +203,7 @@ class LambdaTest extends AnyFlatSpec with BeforeAndAfterEach with TableDrivenPro
 
   val citeTable: TableFor2[Option[String], List[IdField]] = Table(
     ("potentialCite", "idFields"),
-    (None, Nil),
+    (None, List(IdField("URI", "https://example.com/id/court/2023/"))),
     (Option("\"cite\""), List(IdField("Code", "cite"), IdField("Cite", "cite")))
   )
 
