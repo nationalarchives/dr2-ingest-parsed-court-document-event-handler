@@ -88,9 +88,10 @@ class FileProcessor(
         )
 
     val folderMetadataIdFields = potentialDepartment
-      .flatMap { _ =>
-        potentialCite
+      .map { _ =>
+        val potentialIdFields = potentialCite
           .map(cite => List(IdField("Code", cite), IdField("Cite", cite)) ++ uriIdField)
+        potentialIdFields.getOrElse(uriIdField)
       }
       .getOrElse(Nil)
 
