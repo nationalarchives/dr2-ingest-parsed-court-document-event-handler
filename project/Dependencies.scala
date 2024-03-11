@@ -2,7 +2,7 @@ import sbt._
 object Dependencies {
   lazy val logbackVersion = "2.23.0"
   lazy val pureConfigVersion = "0.17.6"
-  lazy val daAwsClientsVersion = "0.1.38"
+  lazy val daAwsClientsVersion = "0.1.39"
   private val fs2Version = "3.9.4"
   private val circeVersion = "0.14.6"
   private val log4CatsVersion = "2.6.0"
@@ -23,7 +23,7 @@ object Dependencies {
   lazy val lambdaJavaEvents = "com.amazonaws" % "aws-lambda-java-events" % "3.11.4"
   lazy val s3Client = "uk.gov.nationalarchives" %% "da-s3-client" % daAwsClientsVersion
   lazy val sfnClient = "uk.gov.nationalarchives" %% "da-sfn-client" % daAwsClientsVersion
-  lazy val commonsCompress = "org.apache.commons" % "commons-compress" % "1.26.0"
+  lazy val commonsCompress = "org.apache.commons" % "commons-compress" % "1.26.1"
   lazy val fs2IO = "co.fs2" %% "fs2-io" % fs2Version
   lazy val scalaTest = "org.scalatest" %% "scalatest" % "3.2.18"
   lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.30"
